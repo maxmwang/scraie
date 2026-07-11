@@ -5,12 +5,13 @@ package analyze
 // path so the formatting can be eyeballed in the actual Discord channel.
 
 import (
-	"github.com/maxmwang/scraie/flights/internal/config"
+	"context"
+
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search"
 )
 
-func SendPlaceholder(cfg config.Config) error {
+func SendPlaceholder(ctx context.Context) error {
 	it := db.Itinerary{
 		DepartureID:  "TEST",
 		ArrivalID:    "TEST",
@@ -43,5 +44,5 @@ func SendPlaceholder(cfg config.Config) error {
 	}
 
 	embed := buildEmbed(it, 999, 842, cheapest)
-	return sendDiscordWebhook(cfg, discordPayload{Embeds: []discordEmbed{embed}})
+	return sendDiscordWebhook(ctx, discordPayload{Embeds: []discordEmbed{embed}})
 }

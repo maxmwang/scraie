@@ -10,6 +10,7 @@ package main
 //   go run ./cmd/placeholder "https://discord.com/api/webhooks/..."
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -27,7 +28,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := analyze.SendPlaceholder(config.Config{DiscordWebhook: webhook}); err != nil {
+	ctx := context.WithValue(context.Background(), config.ContextKey, config.Config{DiscordWebhook: webhook})
+	if err := analyze.SendPlaceholder(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "send failed:", err)
 		os.Exit(1)
 	}

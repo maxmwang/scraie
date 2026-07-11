@@ -149,8 +149,6 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 		return nil
 	}
 
-	cfg := config.FromContext(ctx)
-
 	// Reassemble the latest cheapest option with its segments and layovers so the
 	// embed can describe the flight (airline, flight numbers, duration, stops).
 	segments, err := dbc.GetSegmentsByOptionIDs(ctx, []int64{latestCheapestOption.ID})
@@ -185,7 +183,7 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 		embed.Image = &discordImage{URL: chartURL}
 	}
 
-	return sendDiscordWebhook(cfg, discordPayload{Embeds: []discordEmbed{embed}})
+	return sendDiscordWebhook(ctx, discordPayload{Embeds: []discordEmbed{embed}})
 }
 
 // buildEmbed renders a summary embed for the itinerary whose cheapest fare moved
@@ -353,13 +351,13 @@ type discordField struct {
 	Inline bool   `json:"inline"`
 }
 
-func sendDiscordWebhook(cfg config.Config, payload discordPayload) error {
+func sendDiscordWebhook(ctx context.Context, payload discordPayload) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal discord payload: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, cfg.DiscordWebhook, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, config.FromContext(ctx).DiscordWebhook, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("build discord request: %w", err)
 	}
