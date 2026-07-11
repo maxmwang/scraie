@@ -127,10 +127,12 @@ func Handle(ctx context.Context, args Args) {
 					Msg(fmt.Sprintf("saved %d option(s)", len(result.Options)))
 			}
 
-			if err := analyze.NotifyOnPriceChange(ctx, pool, it); err != nil {
-				log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary discord notify")
+			if it.Notify {
+				err = analyze.NotifyOnPriceChange(ctx, pool, it)
+				if err != nil {
+					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary discord notify")
+				}
 			}
-
 		})
 	}
 	wg.Wait()

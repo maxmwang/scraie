@@ -40,6 +40,7 @@ type Itinerary struct {
 	Hl              string
 	Currency        string
 	Invalid         bool
+	Notify          bool
 }
 
 type Layover struct {

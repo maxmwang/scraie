@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS Itineraries (
     hl               TEXT    NOT NULL DEFAULT 'en',
     currency         TEXT    NOT NULL DEFAULT 'USD',
 
-    invalid          BOOLEAN NOT NULL DEFAULT FALSE
+    invalid          BOOLEAN NOT NULL DEFAULT FALSE,
+    notify           BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS Options (
