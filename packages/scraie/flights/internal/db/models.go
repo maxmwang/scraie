@@ -41,6 +41,7 @@ type Itinerary struct {
 	Currency        string
 	Invalid         bool
 	Notify          bool
+	Description     pgtype.Text
 }
 
 type Layover struct {

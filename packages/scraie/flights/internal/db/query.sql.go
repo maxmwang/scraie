@@ -161,7 +161,7 @@ func (q *Queries) CreateOption(ctx context.Context, arg CreateOptionParams) (int
 }
 
 const getItineraries = `-- name: GetItineraries :many
-SELECT id, departure_id, arrival_id, type, outbound_date, return_date, travel_class, show_hidden, multi_city_json, exclude_basic, deep_search, adults, children, infants_in_seat, infants_on_lap, sort_by, stops, exclude_airlines, include_airlines, bags, max_price, outbound_times, return_times, emissions, layover_duration, exclude_conns, max_duration, gl, hl, currency, invalid, notify FROM itineraries
+SELECT id, departure_id, arrival_id, type, outbound_date, return_date, travel_class, show_hidden, multi_city_json, exclude_basic, deep_search, adults, children, infants_in_seat, infants_on_lap, sort_by, stops, exclude_airlines, include_airlines, bags, max_price, outbound_times, return_times, emissions, layover_duration, exclude_conns, max_duration, gl, hl, currency, invalid, notify, description FROM itineraries
 `
 
 func (q *Queries) GetItineraries(ctx context.Context) ([]Itinerary, error) {
@@ -206,6 +206,7 @@ func (q *Queries) GetItineraries(ctx context.Context) ([]Itinerary, error) {
 			&i.Currency,
 			&i.Invalid,
 			&i.Notify,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}

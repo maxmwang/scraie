@@ -214,6 +214,10 @@ func buildEmbed(it db.Itinerary, oldMin, newMin int32, cheapest search.FlightOpt
 	if desc := describeCheapestOption(cheapest); desc != "" {
 		description = fmt.Sprintf("%s\n%s", summary, desc)
 	}
+	// Prepend the itinerary's free-form note (e.g. which holiday it's for), if set.
+	if it.Description.Valid && it.Description.String != "" {
+		description = fmt.Sprintf("**Description**: %s\n%s", it.Description.String, description)
+	}
 
 	return discordEmbed{
 		Title:       util.ItineraryToString(it),

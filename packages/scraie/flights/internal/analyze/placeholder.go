@@ -7,6 +7,8 @@ package analyze
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search"
 )
@@ -17,6 +19,7 @@ func SendPlaceholder(ctx context.Context) error {
 		ArrivalID:    "TEST",
 		OutboundDate: "2026-08-15",
 		Currency:     "USD",
+		Description:  pgtype.Text{String: "for memorial day", Valid: true},
 		// Type:         int32(serp.OneWay),
 	}
 
