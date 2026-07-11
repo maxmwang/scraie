@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.claude
+.idea
+
+.deployed
+**/*/exec
+__deployer__.zip
+
+scraie.db
+.scraie.yaml

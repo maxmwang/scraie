@@ -1,0 +1,14 @@
+packages:
+  - name: scraie
+
+    functions:
+      - name: flights
+        runtime: "go:1.25"
+        limits:
+          timeout: 10000
+          memory: 512
+        triggers:
+          - name: daily
+            sourceType: scheduler
+            sourceDetails:
+              cron: "0 0 * * *"
