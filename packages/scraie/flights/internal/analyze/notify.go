@@ -36,11 +36,6 @@ const (
 	ansiRed   = "[1;31m"
 )
 
-// ansiBlock wraps text in a Discord ansi code block tinted with colorCode.
-func ansiBlock(colorCode, text string) string {
-	return fmt.Sprintf("```ansi\n%s%s%s\n```", colorCode, text, ansiReset)
-}
-
 // LoadPriceHistory returns every option saved for the itinerary at or after
 // since, reassembled with their segments so each can be matched to a flight by
 // signature. Layovers are not loaded since the price history only needs the
@@ -191,69 +186,181 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 // chart's route-and-dates header, and the body summarizes the price move and
 // describes the new cheapest option; the chart is attached separately.
 func buildEmbed(it db.Itinerary, oldMin, newMin int32, cheapest search.FlightOptions) discordEmbed {
-	dropped := newMin < oldMin
 	color := colorPriceRise
-	if dropped {
+	if newMin < oldMin {
 		color = colorPriceDrop
 	}
 
-	cur := currencySymbol(it.Currency)
+	itinerarySummary := renderItinerarySummary(it)
 
-	// Colored summary of how the cheapest fare moved overall, e.g.
-	// "$999 → $842 | -$157 (-15.7%)".
-	overallColor := ansiRed
-	if dropped {
-		overallColor = ansiGreen
-	}
-	diff := newMin - oldMin
-	summary := ansiBlock(overallColor, fmt.Sprintf("%s%d → %s%d | %s%s%d (%s)",
-		cur, oldMin, cur, newMin,
-		signPrefix(diff), cur, abs32(diff), signedPercent(oldMin, newMin)))
+	priceChange := renderPriceChange(currencySymbol(it.Currency), oldMin, newMin)
 
-	description := summary
-	if desc := describeCheapestOption(cheapest); desc != "" {
-		description = fmt.Sprintf("%s\n%s", summary, desc)
-	}
-	// Prepend the itinerary's free-form note (e.g. which holiday it's for), if set.
-	if it.Description.Valid && it.Description.String != "" {
-		description = fmt.Sprintf("**Description**: %s\n%s", it.Description.String, description)
+	cheapestOptionSummary := renderCheapestOptionSummary(cheapest)
+
+	fields := []discordField{
+		{Name: "Itinerary Summary", Value: itinerarySummary},
+		{Name: "Price Change", Value: priceChange},
+		{Name: "Newest Cheapest Option's First Leg", Value: cheapestOptionSummary},
 	}
 
 	return discordEmbed{
-		Title:       util.ItineraryToString(it),
-		Description: description,
-		Color:       color,
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Title:     util.ItineraryToString(it),
+		Color:     color,
+		Fields:    fields,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 }
 
-// describeCheapestOption renders a multi-line description of the option: one
-// line per segment showing its airline, flight number, route, and duration, with
-// each layover called out between the segments it connects. The airline and
-// flight-number columns are padded so the "·" separators line up across
+// Labels for the itinerary's enum filters, mirroring the SerpAPI enums defined in
+// the serp package. renderItinerarySummary uses these to surface only non-default
+// filters. The zero-index defaults are: type 1 (round trip), travel class 1
+// (economy), and stops 0 (any).
+var (
+	flightTypeLabels  = map[int32]string{1: "Round trip", 2: "One way", 3: "Multi-city"}
+	travelClassLabels = map[int32]string{1: "Economy", 2: "Premium economy", 3: "Business", 4: "First"}
+	stopsLabels       = map[int32]string{0: "Any", 1: "Nonstop", 2: "Up to 1 stop", 3: "Up to 2 stops"}
+)
+
+// renderItinerarySummary renders the itinerary's description (if any) followed by
+// its route, dates, and every filter set to a non-default value, one
+// "_Field_: Value" line each.
+func renderItinerarySummary(it db.Itinerary) string {
+	var lines []string
+	if it.Description.Valid && it.Description.String != "" {
+		lines = append(lines, it.Description.String)
+	}
+
+	field := func(label, value string) {
+		lines = append(lines, fmt.Sprintf("__%s__: %s", label, value))
+	}
+
+	field("Departure", it.DepartureID)
+	field("Arrival", it.ArrivalID)
+	field("Outbound", it.OutboundDate)
+	if it.ReturnDate.Valid && it.ReturnDate.String != "" {
+		field("Return", it.ReturnDate.String)
+	}
+
+	if it.Type != 1 {
+		field("Trip type", labelOr(flightTypeLabels, it.Type))
+	}
+	if it.TravelClass != 1 {
+		field("Travel class", labelOr(travelClassLabels, it.TravelClass))
+	}
+	if it.Stops != 0 {
+		field("Stops", labelOr(stopsLabels, it.Stops))
+	}
+	if it.Adults != 1 {
+		field("Adults", fmt.Sprintf("%d", it.Adults))
+	}
+	if it.Children > 0 {
+		field("Children", fmt.Sprintf("%d", it.Children))
+	}
+	if it.InfantsInSeat > 0 {
+		field("Infants in seat", fmt.Sprintf("%d", it.InfantsInSeat))
+	}
+	if it.InfantsOnLap > 0 {
+		field("Infants on lap", fmt.Sprintf("%d", it.InfantsOnLap))
+	}
+	if it.Bags > 0 {
+		field("Carry-on bags", fmt.Sprintf("%d", it.Bags))
+	}
+	if it.ExcludeBasic {
+		field("Exclude basic", "true")
+	}
+	if it.IncludeAirlines.Valid {
+		field("Include airlines", it.IncludeAirlines.String)
+	}
+	if it.ExcludeAirlines.Valid {
+		field("Exclude airlines", it.ExcludeAirlines.String)
+	}
+	if it.MaxPrice.Valid {
+		field("Max price", fmt.Sprintf("%d", it.MaxPrice.Int32))
+	}
+	if it.OutboundTimes.Valid {
+		field("Outbound times", it.OutboundTimes.String)
+	}
+	if it.ReturnTimes.Valid {
+		field("Return times", it.ReturnTimes.String)
+	}
+	if it.LayoverDuration.Valid {
+		field("Layover duration", it.LayoverDuration.String)
+	}
+	if it.ExcludeConns.Valid {
+		field("Exclude connections", it.ExcludeConns.String)
+	}
+	if it.MaxDuration.Valid {
+		field("Max duration", fmt.Sprintf("%d", it.MaxDuration.Int32))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// labelOr returns m[k], falling back to k's decimal string when k is not a known
+// enum value.
+func labelOr(m map[int32]string, k int32) string {
+	if v, ok := m[k]; ok {
+		return v
+	}
+	return fmt.Sprintf("%d", k)
+}
+
+// renderPriceChange renders a colored summary of how the cheapest fare moved
+// from oldMin to newMin, e.g. "$999 → $842 | -$157 (-15.7%)". The block is
+// tinted green when the fare dropped and red when it rose. cur is the currency
+// symbol to prefix each amount with.
+func renderPriceChange(cur string, oldMin, newMin int32) string {
+	color := ansiRed
+	if newMin < oldMin {
+		color = ansiGreen
+	}
+
+	diff := newMin - oldMin
+	sign := "+"
+	if diff < 0 {
+		sign = "-"
+		diff = -diff
+	}
+
+	percent := "0%"
+	if oldMin != 0 {
+		percent = fmt.Sprintf("%+.1f%%", float64(newMin-oldMin)/float64(oldMin)*100)
+	}
+
+	// Wrapped in a Discord ansi code block, the only way to color text in an embed.
+	return fmt.Sprintf("```ansi\n%s%s%d → %s%d | %s%s%d (%s)%s\n```",
+		color, cur, oldMin, cur, newMin, sign, cur, diff, percent, ansiReset)
+}
+
+// renderCheapestOptionSummary renders a multi-line description of the option: one
+// line per segment showing its airline, departure/arrival times, route, and
+// duration, with each layover called out between the segments it connects. The
+// airline and time columns are padded so the "·" separators line up across
 // segments. It returns "" when the option has no segments to describe.
-func describeCheapestOption(fo search.FlightOptions) string {
+func renderCheapestOptionSummary(fo search.FlightOptions) string {
 	if len(fo.Segments) == 0 {
 		return ""
 	}
 
-	// Widths of the airline and flight-number columns, so the separators align.
-	var airlineWidth, flightNumberWidth int
-	for _, s := range fo.Segments {
+	// Per-segment "6:32pm - 11:32pm(+1)" time ranges and the widths of the
+	// airline and time columns, so the separators align.
+	times := make([]string, len(fo.Segments))
+	var airlineWidth, timeWidth int
+	for i, s := range fo.Segments {
+		times[i] = formatTimeRange(s.DepartureTime, s.ArrivalTime, s.Overnight)
 		airlineWidth = max(airlineWidth, len(s.Airline))
-		flightNumberWidth = max(flightNumberWidth, len(s.FlightNumber))
+		timeWidth = max(timeWidth, len(times[i]))
 	}
 
 	var b strings.Builder
-	b.WriteString("**Newest Cheapest First Leg Option:**\n```")
+	b.WriteString("```")
 	for i, s := range fo.Segments {
 		fmt.Fprintf(&b, "\n%-*s · %-*s · %s→%s · %s",
 			airlineWidth, s.Airline,
-			flightNumberWidth, s.FlightNumber,
+			timeWidth, times[i],
 			s.DepartureAirportID, s.ArrivalAirportID,
 			formatDuration(s.Duration))
 
-		// The layover between this segment and the next, if any.
 		if i < len(fo.Layovers) {
 			l := fo.Layovers[i]
 			airport := l.AirportID
@@ -269,6 +376,25 @@ func describeCheapestOption(fo search.FlightOptions) string {
 	}
 	b.WriteString("\n```")
 	return b.String()
+}
+
+// formatTimeRange renders a segment's departure and arrival times as
+// "6:32pm - 11:32pm", appending "(+1)" when the flight is overnight. Each time
+// falls back to its raw string if it cannot be parsed.
+func formatTimeRange(departure, arrival string, overnight bool) string {
+	clock := func(s string) string {
+		t, err := time.Parse("2006-01-02 15:04", s)
+		if err != nil {
+			return s
+		}
+		return t.Format("3:04pm")
+	}
+
+	s := fmt.Sprintf("%s - %s", clock(departure), clock(arrival))
+	if overnight {
+		s += "(+1)"
+	}
+	return s
 }
 
 // formatDuration renders a count of minutes as "5h 30m", "3h", or "45m",
@@ -303,32 +429,6 @@ func currencySymbol(code string) string {
 	default:
 		return code
 	}
-}
-
-// signedPercent formats the relative change from old to new as a signed
-// percentage, e.g. "+12.5%" or "-9.1%". It returns "0%" when old is zero.
-func signedPercent(old, new int32) string {
-	if old == 0 {
-		return "0%"
-	}
-	return fmt.Sprintf("%+.1f%%", float64(new-old)/float64(old)*100)
-}
-
-// signPrefix returns the sign that precedes n's magnitude ("-" for negative,
-// "+" otherwise), so a signed amount can be rendered as e.g. "-$157".
-func signPrefix(n int32) string {
-	if n < 0 {
-		return "-"
-	}
-	return "+"
-}
-
-// abs32 returns the absolute value of n.
-func abs32(n int32) int32 {
-	if n < 0 {
-		return -n
-	}
-	return n
 }
 
 type discordPayload struct {

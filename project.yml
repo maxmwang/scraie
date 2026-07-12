@@ -1,6 +1,9 @@
 packages:
   - name: scraie
-
+    environment:
+      FLIGHTS_SERPAPI_KEY: ${FLIGHTS_SERPAPI_KEY}
+      FLIGHTS_DB_URI: ${FLIGHTS_DB_URI}
+      SCRAIE_DISCORD_WEBHOOK: ${SCRAIE_DISCORD_WEBHOOK}
     functions:
       - name: flights
         runtime: "go:1.25"
