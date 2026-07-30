@@ -5,23 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
+	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 
 	"github.com/maxmwang/scraie/flights/internal/config"
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search"
 	"github.com/maxmwang/scraie/flights/internal/util"
 )
-
-// priceChangeThreshold is the relative change in the cheapest price that triggers
-// a Discord notification.
-const priceChangeThreshold = 0.05
 
 const (
 	colorPriceDrop = 0x2ECC71 // green
@@ -36,45 +34,30 @@ const (
 	ansiRed   = "[1;31m"
 )
 
-// LoadPriceHistory returns every option saved for the itinerary at or after
-// since, reassembled with their segments so each can be matched to a flight by
-// signature. Layovers are not loaded since the price history only needs the
-// price, timestamp, and signature. Options are ordered oldest first.
-func LoadPriceHistory(ctx context.Context, dbClient *db.Queries, itineraryID int64, since pgtype.Timestamptz) ([]search.FlightOptions, error) {
-	options, err := dbClient.GetOptionsSince(ctx, db.GetOptionsSinceParams{
-		ItineraryID: itineraryID,
-		SearchedAt:  since,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get options since: %w", err)
-	}
-	if len(options) == 0 {
-		return nil, nil
-	}
+const NumDaysToPlot = 60
 
-	ids := make([]int64, len(options))
-	for i, o := range options {
-		ids[i] = o.ID
-	}
+// constructDailyCheapestOptions returns a sorted list containing the cheapest
+// option from each distinct timestamp. Since a single scheduled function run
+// will reuse a single timestamp for all scraped options, we expect about 1
+// timestamp per day shared with many options.
+func constructDailyCheapestOptions(options []db.Option) []db.Option {
+	m := make(map[pgtype.Timestamptz]db.Option)
 
-	segments, err := dbClient.GetSegmentsByOptionIDs(ctx, ids)
-	if err != nil {
-		return nil, fmt.Errorf("get history segments: %w", err)
-	}
-
-	segmentsByOption := make(map[int64][]db.Segment, len(options))
-	for _, s := range segments {
-		segmentsByOption[s.OptionID] = append(segmentsByOption[s.OptionID], s)
-	}
-
-	flights := make([]search.FlightOptions, len(options))
-	for i, o := range options {
-		flights[i] = search.FlightOptions{
-			Option:   o,
-			Segments: segmentsByOption[o.ID],
+	for _, opt := range options {
+		if minOpt, ok := m[opt.SearchedAt]; !ok || opt.Price < minOpt.Price {
+			m[opt.SearchedAt] = opt
 		}
 	}
-	return flights, nil
+
+	s := make([]db.Option, 0, len(m))
+	for _, opt := range m {
+		s = append(s, opt)
+	}
+	slices.SortFunc(s, func(a db.Option, b db.Option) int {
+		return a.SearchedAt.Time.Compare(b.SearchedAt.Time)
+	})
+
+	return s
 }
 
 // findCheapeastOptionOfPreviousAndLatestSearchTimestamp finds the cheapest options with
@@ -107,8 +90,6 @@ func findCheapeastOptionOfPreviousAndLatestSearchTimestamp(options []db.Option) 
 	return options[minPreviousI], options[minLatestI]
 }
 
-const NumDaysToPlot = 30
-
 // NotifyOnPriceChange compares the cheapest fare of the latest search against the
 // cheapest fare of the previous search and, if it moved by more than
 // priceChangeThreshold in either direction, posts a summary of the itinerary and
@@ -120,32 +101,32 @@ const NumDaysToPlot = 30
 func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerary) error {
 	dbc := db.New(pool)
 
+	since30Days := pgtype.Timestamptz{
+		// +1hour in case of small function run scheduling variance
+		Time:  time.Now().AddDate(0, 0, -NumDaysToPlot).Add(-time.Hour),
+		Valid: true,
+	}
 	options, err := dbc.GetOptionsSince(ctx, db.GetOptionsSinceParams{
 		ItineraryID: it.ID,
-		SearchedAt:  pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -2), Valid: true},
+		SearchedAt:  since30Days,
 	})
 	if err != nil {
 		return fmt.Errorf("GetOptionsSince: %w", err)
 	}
-	if len(options) == 0 {
+	if len(options) < 2 {
 		// Nothing has been searched recently: nothing to compare or report.
 		return nil
 	}
+	cheapestOptions := constructDailyCheapestOptions(options)
 
-	previousCheapestOption, latestCheapestOption := findCheapeastOptionOfPreviousAndLatestSearchTimestamp(options)
-	prevPrice := previousCheapestOption.Price
-	latestPrice := latestCheapestOption.Price
-	if prevPrice == 0 {
-		// No previous search to compare against, or a malformed baseline price.
-		return nil
-	}
-	change := math.Abs(float64(latestPrice-prevPrice)) / float64(prevPrice)
-	if change <= priceChangeThreshold {
+	checks := makeChecks(cheapestOptions)
+	if !checks.any() {
 		return nil
 	}
 
 	// Reassemble the latest cheapest option with its segments and layovers so the
 	// embed can describe the flight (airline, flight numbers, duration, stops).
+	latestCheapestOption := cheapestOptions[len(cheapestOptions)-1]
 	segments, err := dbc.GetSegmentsByOptionIDs(ctx, []int64{latestCheapestOption.ID})
 	if err != nil {
 		return fmt.Errorf("GetSegmentsByOptionIDs: %w", err)
@@ -160,22 +141,9 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 		Layovers: layovers,
 	}
 
-	embed := buildEmbed(it, prevPrice, latestPrice, cheapest)
-
-	// Add a chart of the recent daily-minimum price history to the embed. Any
-	// failure here is non-fatal: the embed is still worth sending on its own.
-	since := pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -NumDaysToPlot-1), Valid: true}
-	history, err := LoadPriceHistory(ctx, dbc, it.ID, since)
+	embed, err := buildEmbed(it, cheapestOptions, cheapest, checks)
 	if err != nil {
-		return fmt.Errorf("LoadPriceHistory: %w", err)
-	}
-
-	chartURL, err := buildDailyMinimumPriceChartURL(it, history, NumDaysToPlot)
-	if err != nil {
-		return err
-	}
-	if chartURL != "" {
-		embed.Image = &discordImage{URL: chartURL}
+		return fmt.Errorf("buildEmbed: failed to build embed message")
 	}
 
 	return sendDiscordWebhook(ctx, discordPayload{Embeds: []discordEmbed{embed}})
@@ -185,7 +153,13 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 // from oldMin (previous search) to newMin (latest search). The title mirrors the
 // chart's route-and-dates header, and the body summarizes the price move and
 // describes the new cheapest option; the chart is attached separately.
-func buildEmbed(it db.Itinerary, oldMin, newMin int32, cheapest search.FlightOptions) discordEmbed {
+func buildEmbed(it db.Itinerary, options []db.Option, cheapest search.FlightOptions, checks checkResults) (discordEmbed, error) {
+	if len(options) < 2 {
+		return discordEmbed{}, fmt.Errorf("unexpected len(opions) < 2")
+	}
+
+	oldMin := options[len(options)-2].Price
+	newMin := options[len(options)-1].Price
 	color := colorPriceRise
 	if newMin < oldMin {
 		color = colorPriceDrop
@@ -193,22 +167,32 @@ func buildEmbed(it db.Itinerary, oldMin, newMin int32, cheapest search.FlightOpt
 
 	itinerarySummary := renderItinerarySummary(it)
 
-	priceChange := renderPriceChange(currencySymbol(it.Currency), oldMin, newMin)
+	priceNotification := renderPriceNotification(currencySymbol(it.Currency), newMin, checks)
 
 	cheapestOptionSummary := renderCheapestOptionSummary(cheapest)
 
 	fields := []discordField{
 		{Name: "Itinerary Summary", Value: itinerarySummary},
-		{Name: "Price Change", Value: priceChange},
+		{Name: "Price Notification", Value: priceNotification},
 		{Name: "Newest Cheapest Option's First Leg", Value: cheapestOptionSummary},
 	}
 
-	return discordEmbed{
+	embedMsg := discordEmbed{
 		Title:     util.ItineraryToString(it),
 		Color:     color,
 		Fields:    fields,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
+
+	chart, err := buildDailyMinimumPriceChartURL(it, options, NumDaysToPlot)
+	if err != nil || chart == "" {
+		// error is non-fatal: log error and continue sending message
+		log.Error().Err(err).Msg("failed to build buildDailyMinimumPriceChartURL chart")
+	} else {
+		embedMsg.Image = &discordImage{URL: chart}
+	}
+
+	return embedMsg, nil
 }
 
 // Labels for the itinerary's enum filters, mirroring the SerpAPI enums defined in
@@ -226,9 +210,6 @@ var (
 // "_Field_: Value" line each.
 func renderItinerarySummary(it db.Itinerary) string {
 	var lines []string
-	if it.Description.Valid && it.Description.String != "" {
-		lines = append(lines, it.Description.String)
-	}
 
 	field := func(label, value string) {
 		lines = append(lines, fmt.Sprintf("__%s__: %s", label, value))
@@ -240,6 +221,11 @@ func renderItinerarySummary(it db.Itinerary) string {
 	if it.ReturnDate.Valid && it.ReturnDate.String != "" {
 		field("Return", it.ReturnDate.String)
 	}
+	if it.Description.Valid && it.Description.String != "" {
+		field("Description", it.Description.String)
+	}
+
+	lines = append(lines, "")
 
 	if it.Type != 1 {
 		field("Trip type", labelOr(flightTypeLabels, it.Type))
@@ -305,31 +291,46 @@ func labelOr(m map[int32]string, k int32) string {
 	return fmt.Sprintf("%d", k)
 }
 
-// renderPriceChange renders a colored summary of how the cheapest fare moved
+// renderPriceNotification renders a colored summary of how the cheapest fare moved
 // from oldMin to newMin, e.g. "$999 → $842 | -$157 (-15.7%)". The block is
 // tinted green when the fare dropped and red when it rose. cur is the currency
 // symbol to prefix each amount with.
-func renderPriceChange(cur string, oldMin, newMin int32) string {
-	color := ansiRed
-	if newMin < oldMin {
-		color = ansiGreen
+func renderPriceNotification(cur string, newMin int32, checks checkResults) string {
+	s := strings.Builder{}
+
+	s.WriteString("```ansi\n")
+
+	if checks.near7DayMinimum.pass {
+		fmt.Fprintf(&s, "Near 7 Day Minimum: %s%d → %s%d\n",
+			cur, checks.near7DayMinimum.prev7DayMinimum, cur, newMin)
 	}
 
-	diff := newMin - oldMin
-	sign := "+"
-	if diff < 0 {
-		sign = "-"
-		diff = -diff
+	if checks.priceMovement.pass {
+		oldMin := checks.priceMovement.prev
+		color := ansiRed
+		if newMin < oldMin {
+			color = ansiGreen
+		}
+
+		diff := newMin - oldMin
+		sign := "+"
+		if diff < 0 {
+			sign = "-"
+			diff = -diff
+		}
+
+		percent := "0%"
+		if oldMin != 0 {
+			percent = fmt.Sprintf("%+.1f%%", float64(newMin-oldMin)/float64(oldMin)*100)
+		}
+
+		fmt.Fprintf(&s, "Price Movement: %s%s%d → %s%d | %s%s%d (%s)%s\n",
+			color, cur, oldMin, cur, newMin, sign, cur, diff, percent, ansiReset)
 	}
 
-	percent := "0%"
-	if oldMin != 0 {
-		percent = fmt.Sprintf("%+.1f%%", float64(newMin-oldMin)/float64(oldMin)*100)
-	}
+	s.WriteString("```")
 
-	// Wrapped in a Discord ansi code block, the only way to color text in an embed.
-	return fmt.Sprintf("```ansi\n%s%s%d → %s%d | %s%s%d (%s)%s\n```",
-		color, cur, oldMin, cur, newMin, sign, cur, diff, percent, ansiReset)
+	return s.String()
 }
 
 // renderCheapestOptionSummary renders a multi-line description of the option: one
@@ -475,7 +476,8 @@ func sendDiscordWebhook(ctx context.Context, payload discordPayload) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("discord webhook returned status %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("discord webhook returned status %d, %s", resp.StatusCode, body)
 	}
 	return nil
 }

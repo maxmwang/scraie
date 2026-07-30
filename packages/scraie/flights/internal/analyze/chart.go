@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/maxmwang/scraie/flights/internal/db"
-	"github.com/maxmwang/scraie/flights/internal/search"
 	"github.com/maxmwang/scraie/flights/internal/util"
 )
 
@@ -17,16 +16,16 @@ import (
 // Ys are the minimum observed search.FlightOptions price on each day. Each X
 // value is anchored to the start of that day in the observation's own
 // location.
-func dailyMinimumPriceSeries(history []search.FlightOptions) ([]time.Time, []float64) {
+func dailyMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 	minByDay := make(map[time.Time]float64)
 	for _, o := range history {
-		if !o.Option.SearchedAt.Valid {
+		if !o.SearchedAt.Valid {
 			continue
 		}
-		t := o.Option.SearchedAt.Time
+		t := o.SearchedAt.Time
 		y, m, d := t.Date()
 		day := time.Date(y, m, d, 0, 0, 0, 0, t.Location())
-		price := float64(o.Option.Price)
+		price := float64(o.Price)
 		if cur, ok := minByDay[day]; !ok || price < cur {
 			minByDay[day] = price
 		}
@@ -51,7 +50,7 @@ func dailyMinimumPriceSeries(history []search.FlightOptions) ([]time.Time, []flo
 // as a QuickChart (https://quickchart.io) line chart and returns its image URL,
 // suitable for use as a Discord embed image. It returns "" (without error) when
 // there is no data to plot.
-func buildDailyMinimumPriceChartURL(it db.Itinerary, history []search.FlightOptions, nDaysToChart int) (string, error) {
+func buildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysToChart int) (string, error) {
 	xs, ys := dailyMinimumPriceSeries(history)
 	if len(xs) == 0 {
 		return "", nil
@@ -78,6 +77,7 @@ func buildDailyMinimumPriceChartURL(it db.Itinerary, history []search.FlightOpti
 				"borderWidth":          2,
 				"pointRadius":          3,
 				"pointBackgroundColor": "#3498DB",
+				"steppedLine":          true,
 			}},
 		},
 		"options": map[string]any{

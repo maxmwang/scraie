@@ -6,6 +6,7 @@ package analyze
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -23,8 +24,12 @@ func SendPlaceholder(ctx context.Context) error {
 		// Type:         int32(serp.OneWay),
 	}
 
+	options := []db.Option{
+		{SearchedAt: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -1)}, TotalDuration: 15*60 + 30, Price: 831},
+		{SearchedAt: pgtype.Timestamptz{Time: time.Now()}, TotalDuration: 15*60 + 30, Price: 842},
+	}
 	cheapest := search.FlightOptions{
-		Option: db.Option{TotalDuration: 15*60 + 30, Price: 842},
+		Option: options[0],
 		Segments: []db.Segment{
 			{
 				Airline:            "United",
@@ -50,7 +55,11 @@ func SendPlaceholder(ctx context.Context) error {
 			{AirportID: "EWR", Duration: 2*60 + 15},
 		},
 	}
+	checks := checkResults{
+		near7DayMinimum: near7DayMinimumResult{pass: true, prev7DayMinimum: 800},
+		priceMovement:   priceMovementResult{pass: true, prev: 850},
+	}
 
-	embed := buildEmbed(it, 999, 842, cheapest)
+	embed, _ := buildEmbed(it, options, cheapest, checks)
 	return sendDiscordWebhook(ctx, discordPayload{Embeds: []discordEmbed{embed}})
 }

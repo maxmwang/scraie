@@ -20,6 +20,7 @@ import (
 )
 
 type Args struct {
+	Search   bool
 	Readonly bool
 }
 
@@ -44,87 +45,90 @@ func Handle(ctx context.Context, args Args) {
 	var wg sync.WaitGroup
 	for _, it := range itineraries {
 		wg.Go(func() {
-			result, err := searcher.Search(it)
-			if err != nil {
-				log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary search error")
-				return
-			}
-			log.Info().Int64("itinerary_id", it.ID).Str("desc", util.ItineraryToString(it)).
-				Msg(fmt.Sprintf("found %d option(s)", len(result.Options)))
-
-			searchedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-
-			if !args.Readonly {
-				for j, or := range result.Options {
-					tx, err := pool.Begin(ctx)
-					if err != nil {
-						log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction begin error")
-						continue
-					}
-					qtx := dbClient.WithTx(tx)
-
-					optionID, err := qtx.CreateOption(ctx, db.CreateOptionParams{
-						ItineraryID:   or.Option.ItineraryID,
-						TotalDuration: or.Option.TotalDuration,
-						Price:         or.Option.Price,
-						Type:          or.Option.Type,
-						SearchedAt:    searchedAt,
-					})
-					if err != nil {
-						log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option save error")
-						tx.Rollback(ctx)
-						continue
-					}
-
-					segmentParams := make([]db.BulkInsertSegmentsParams, len(or.Segments))
-					for k, s := range or.Segments {
-						segmentParams[k] = db.BulkInsertSegmentsParams{
-							OptionID:             optionID,
-							DepartureAirportName: s.DepartureAirportName,
-							DepartureAirportID:   s.DepartureAirportID,
-							DepartureTime:        s.DepartureTime,
-							ArrivalAirportName:   s.ArrivalAirportName,
-							ArrivalAirportID:     s.ArrivalAirportID,
-							ArrivalTime:          s.ArrivalTime,
-							Duration:             s.Duration,
-							Airplane:             s.Airplane,
-							Airline:              s.Airline,
-							AirlineLogo:          s.AirlineLogo,
-							TravelClass:          s.TravelClass,
-							FlightNumber:         s.FlightNumber,
-							Overnight:            s.Overnight,
-						}
-					}
-					if _, err := qtx.BulkInsertSegments(ctx, segmentParams); err != nil {
-						log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option segments save error")
-						tx.Rollback(ctx)
-						continue
-					}
-
-					layoverParams := make([]db.BulkInsertLayoversParams, len(or.Layovers))
-					for k, l := range or.Layovers {
-						layoverParams[k] = db.BulkInsertLayoversParams{
-							OptionID:  optionID,
-							Duration:  l.Duration,
-							Name:      l.Name,
-							AirportID: l.AirportID,
-							Overnight: l.Overnight,
-						}
-					}
-					if _, err := qtx.BulkInsertLayovers(ctx, layoverParams); err != nil {
-						log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option layovers save error")
-						tx.Rollback(ctx)
-						continue
-					}
-
-					if err := tx.Commit(ctx); err != nil {
-						log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction commit error")
-						continue
-					}
+			if args.Search {
+				result, err := searcher.Search(it)
+				if err != nil {
+					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary search error")
+					return
 				}
 
 				log.Info().Int64("itinerary_id", it.ID).Str("desc", util.ItineraryToString(it)).
-					Msg(fmt.Sprintf("saved %d option(s)", len(result.Options)))
+					Msg(fmt.Sprintf("found %d option(s)", len(result.Options)))
+
+				searchedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+
+				if !args.Readonly {
+					for j, or := range result.Options {
+						tx, err := pool.Begin(ctx)
+						if err != nil {
+							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction begin error")
+							continue
+						}
+						qtx := dbClient.WithTx(tx)
+
+						optionID, err := qtx.CreateOption(ctx, db.CreateOptionParams{
+							ItineraryID:   or.Option.ItineraryID,
+							TotalDuration: or.Option.TotalDuration,
+							Price:         or.Option.Price,
+							Type:          or.Option.Type,
+							SearchedAt:    searchedAt,
+						})
+						if err != nil {
+							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option save error")
+							tx.Rollback(ctx)
+							continue
+						}
+
+						segmentParams := make([]db.BulkInsertSegmentsParams, len(or.Segments))
+						for k, s := range or.Segments {
+							segmentParams[k] = db.BulkInsertSegmentsParams{
+								OptionID:             optionID,
+								DepartureAirportName: s.DepartureAirportName,
+								DepartureAirportID:   s.DepartureAirportID,
+								DepartureTime:        s.DepartureTime,
+								ArrivalAirportName:   s.ArrivalAirportName,
+								ArrivalAirportID:     s.ArrivalAirportID,
+								ArrivalTime:          s.ArrivalTime,
+								Duration:             s.Duration,
+								Airplane:             s.Airplane,
+								Airline:              s.Airline,
+								AirlineLogo:          s.AirlineLogo,
+								TravelClass:          s.TravelClass,
+								FlightNumber:         s.FlightNumber,
+								Overnight:            s.Overnight,
+							}
+						}
+						if _, err := qtx.BulkInsertSegments(ctx, segmentParams); err != nil {
+							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option segments save error")
+							tx.Rollback(ctx)
+							continue
+						}
+
+						layoverParams := make([]db.BulkInsertLayoversParams, len(or.Layovers))
+						for k, l := range or.Layovers {
+							layoverParams[k] = db.BulkInsertLayoversParams{
+								OptionID:  optionID,
+								Duration:  l.Duration,
+								Name:      l.Name,
+								AirportID: l.AirportID,
+								Overnight: l.Overnight,
+							}
+						}
+						if _, err := qtx.BulkInsertLayovers(ctx, layoverParams); err != nil {
+							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option layovers save error")
+							tx.Rollback(ctx)
+							continue
+						}
+
+						if err := tx.Commit(ctx); err != nil {
+							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction commit error")
+							continue
+						}
+					}
+
+					log.Info().Int64("itinerary_id", it.ID).Str("desc", util.ItineraryToString(it)).
+						Msg(fmt.Sprintf("saved %d option(s)", len(result.Options)))
+				}
 			}
 
 			if it.Notify {
