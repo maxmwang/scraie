@@ -71,7 +71,7 @@ type priceMovementResult struct {
 // priceMovementThreshold is the minimum percent change from the previous
 // scrape minimum to the newly scraped minimum needed to pass the
 // checkPriceMovement check.
-const priceMovementThreshold = 0.04
+const priceMovementThreshold = 0.05
 
 // checkPriceMovement calculates the (minimum) price from the
 // previous scrape (len(options) - 2), then returns true if the newly scraped
