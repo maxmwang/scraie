@@ -90,6 +90,7 @@ func buildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 				"yAxes": []map[string]any{{
 					"ticks": map[string]any{"beginAtZero": false},
 				}},
+				"xAxes": []map[string]any{{"type": "time"}},
 			},
 		},
 	}
