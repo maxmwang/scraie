@@ -20,7 +20,7 @@ import (
 )
 
 type Args struct {
-	Search   bool
+	NoSearch bool
 	Readonly bool
 }
 
@@ -45,7 +45,7 @@ func Handle(ctx context.Context, args Args) {
 	var wg sync.WaitGroup
 	for _, it := range itineraries {
 		wg.Go(func() {
-			if args.Search {
+			if !args.NoSearch {
 				result, err := searcher.Search(it)
 				if err != nil {
 					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary search error")

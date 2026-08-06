@@ -10,5 +10,5 @@ import (
 // without writing to the database. The deployed function runs via handler.Handle
 // (see project.yml) with writes enabled.
 func main() {
-	app.Handle(context.Background(), app.Args{Search: false, Readonly: true})
+	app.Handle(context.Background(), app.Args{NoSearch: true, Readonly: true})
 }

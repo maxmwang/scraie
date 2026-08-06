@@ -305,7 +305,7 @@ func renderPriceNotification(cur string, newMin int32, checks checkResults) stri
 			cur, checks.near7DayMinimum.prev7DayMinimum, cur, newMin)
 	}
 
-	if checks.priceMovement.pass {
+	if checks.near7DayMinimum.pass || checks.priceMovement.pass {
 		oldMin := checks.priceMovement.prev
 		color := ansiRed
 		if newMin < oldMin {
@@ -324,7 +324,7 @@ func renderPriceNotification(cur string, newMin int32, checks checkResults) stri
 			percent = fmt.Sprintf("%+.1f%%", float64(newMin-oldMin)/float64(oldMin)*100)
 		}
 
-		fmt.Fprintf(&s, "Price Movement: %s%s%d → %s%d | %s%s%d (%s)%s\n",
+		fmt.Fprintf(&s, "Price Movement:\t %s%s%d → %s%d | %s%s%d (%s)%s\n",
 			color, cur, oldMin, cur, newMin, sign, cur, diff, percent, ansiReset)
 	}
 
