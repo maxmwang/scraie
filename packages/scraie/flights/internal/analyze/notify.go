@@ -60,36 +60,6 @@ func constructDailyCheapestOptions(options []db.Option) []db.Option {
 	return s
 }
 
-// findCheapeastOptionOfPreviousAndLatestSearchTimestamp finds the cheapest options with
-// the second to latest and the latest SearchedAt timestamp
-func findCheapeastOptionOfPreviousAndLatestSearchTimestamp(options []db.Option) (db.Option, db.Option) {
-	latestSearchTimestamp := options[len(options)-1].SearchedAt.Time
-	previousSearchTimestamp := time.Time{}
-	i := len(options) - 1
-
-	minLatestI := i
-	for ; i >= 0; i-- {
-		if options[i].SearchedAt.Time.Before(latestSearchTimestamp) {
-			previousSearchTimestamp = options[i].SearchedAt.Time
-			break
-		} else if options[i].Price <= options[minLatestI].Price {
-			minLatestI = i
-		}
-	}
-
-	minPreviousI := i
-	for ; i >= 0 && options[i].SearchedAt.Time.Equal(previousSearchTimestamp); i-- {
-		if options[i].Price <= options[minPreviousI].Price {
-			minPreviousI = i
-		}
-	}
-
-	if previousSearchTimestamp.IsZero() {
-		return options[minLatestI], options[minLatestI]
-	}
-	return options[minPreviousI], options[minLatestI]
-}
-
 // NotifyOnPriceChange compares the cheapest fare of the latest search against the
 // cheapest fare of the previous search and, if it moved by more than
 // priceChangeThreshold in either direction, posts a summary of the itinerary and

@@ -88,6 +88,6 @@ func checkPriceMovement(options []db.Option) priceMovementResult {
 	if math.Abs(float64(prevMin-newMin))/float64(prevMin) >= priceMovementThreshold {
 		return priceMovementResult{pass: true, prev: prevMin}
 	} else {
-		return priceMovementResult{}
+		return priceMovementResult{prev: prevMin}
 	}
 }

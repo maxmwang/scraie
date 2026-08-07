@@ -4,8 +4,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/maxmwang/scraie/flights/internal/db"
 )
+
+// opt builds a db.Option with just the fields the function under test reads.
+func opt(id int64, price int32, searchedAt time.Time) db.Option {
+	return db.Option{
+		ID:         id,
+		Price:      price,
+		SearchedAt: pgtype.Timestamptz{Time: searchedAt, Valid: true},
+	}
+}
 
 // nowMinusDays builds a timestamp relative to time.Now(), which is what
 // checkNear7DayMinimum compares its 7 day window against. The fixed ts base
