@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"flag"
 
 	"github.com/maxmwang/scraie/flights/internal/app"
 )
 
-// Local entry point. Runs in read-only mode so a local run searches and reports
-// without writing to the database. The deployed function runs via handler.Handle
-// (see project.yml) with writes enabled.
+// Local entry point. Both flags default to false, so a plain run searches and
+// writes exactly as the deployed function does. The deployed function runs via
+// handler.Handle (see project.yml), which passes no flags.
 func main() {
-	app.Handle(context.Background(), app.Args{NoSearch: true, Readonly: true})
+	nosearch := flag.Bool("nosearch", false, "skip the search and only run the Discord notifications")
+	readonly := flag.Bool("readonly", false, "search and notify without writing options to the database")
+	flag.Parse()
+
+	app.Handle(context.Background(), app.Args{NoSearch: *nosearch, Readonly: *readonly})
 }

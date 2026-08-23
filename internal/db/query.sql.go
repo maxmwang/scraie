@@ -22,7 +22,7 @@ type BulkInsertLayoversParams struct {
 type BulkInsertOptionsParams struct {
 	ItineraryID   int64
 	TotalDuration int32
-	Price         int32
+	Price         pgtype.Numeric
 	Type          string
 	SearchedAt    pgtype.Timestamptz
 }
@@ -142,7 +142,7 @@ RETURNING id
 type CreateOptionParams struct {
 	ItineraryID   int64
 	TotalDuration int32
-	Price         int32
+	Price         pgtype.Numeric
 	Type          string
 	SearchedAt    pgtype.Timestamptz
 }

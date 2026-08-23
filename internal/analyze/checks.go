@@ -4,8 +4,23 @@ import (
 	"math"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/maxmwang/scraie/flights/internal/db"
 )
+
+// priceFloat reads an Options.price NUMERIC as a float64, which is what every
+// comparison, percentage and chart value in this package works in. A fare is
+// far inside float64's exact range, so the only precision this can lose is
+// below the cent. An invalid or NaN NUMERIC reads as 0, matching how a missing
+// price behaved when the column was an integer.
+func priceFloat(p pgtype.Numeric) float64 {
+	f, err := p.Float64Value()
+	if err != nil || !f.Valid {
+		return 0
+	}
+	return f.Float64
+}
 
 type checkResults struct {
 	near7DayMinimum near7DayMinimumResult
@@ -25,7 +40,7 @@ func (c checkResults) any() bool {
 
 type near7DayMinimumResult struct {
 	pass            bool
-	prev7DayMinimum int32
+	prev7DayMinimum float64
 }
 
 // near7DayMinimumThreshold is the precentage the newly scraped minimum
@@ -44,19 +59,19 @@ func checkNear7DayMinimum(options []db.Option) near7DayMinimumResult {
 	}
 
 	// includes latest scrape when calculating 7 day minimum
-	prev7DayMinimum := options[len(options)-1].Price
+	prev7DayMinimum := priceFloat(options[len(options)-1].Price)
 	for i := len(options) - 2; i >= 0; i-- {
 		if options[i].SearchedAt.Time.Before(time.Now().AddDate(0, 0, -7).Add(-time.Hour)) {
 			break
 		}
-		if options[i].Price < prev7DayMinimum {
-			prev7DayMinimum = options[i].Price
+		if p := priceFloat(options[i].Price); p < prev7DayMinimum {
+			prev7DayMinimum = p
 		}
 	}
 
-	newPrice := options[len(options)-1].Price
+	newPrice := priceFloat(options[len(options)-1].Price)
 
-	if math.Abs(float64(prev7DayMinimum-newPrice))/float64(prev7DayMinimum) <= near7DayMinimumThreshold {
+	if math.Abs(prev7DayMinimum-newPrice)/prev7DayMinimum <= near7DayMinimumThreshold {
 		return near7DayMinimumResult{pass: true, prev7DayMinimum: prev7DayMinimum}
 	} else {
 		return near7DayMinimumResult{}
@@ -65,7 +80,7 @@ func checkNear7DayMinimum(options []db.Option) near7DayMinimumResult {
 
 type priceMovementResult struct {
 	pass bool
-	prev int32
+	prev float64
 }
 
 // priceMovementThreshold is the minimum percent change from the previous
@@ -82,10 +97,10 @@ func checkPriceMovement(options []db.Option) priceMovementResult {
 		return priceMovementResult{}
 	}
 
-	prevMin := options[len(options)-2].Price
-	newMin := options[len(options)-1].Price
+	prevMin := priceFloat(options[len(options)-2].Price)
+	newMin := priceFloat(options[len(options)-1].Price)
 
-	if math.Abs(float64(prevMin-newMin))/float64(prevMin) >= priceMovementThreshold {
+	if math.Abs(prevMin-newMin)/prevMin >= priceMovementThreshold {
 		return priceMovementResult{pass: true, prev: prevMin}
 	} else {
 		return priceMovementResult{prev: prevMin}

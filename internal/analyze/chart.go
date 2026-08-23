@@ -25,7 +25,7 @@ func dailyMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 		t := o.SearchedAt.Time
 		y, m, d := t.Date()
 		day := time.Date(y, m, d, 0, 0, 0, 0, t.Location())
-		price := float64(o.Price)
+		price := priceFloat(o.Price)
 		if cur, ok := minByDay[day]; !ok || price < cur {
 			minByDay[day] = price
 		}

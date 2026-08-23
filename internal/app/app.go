@@ -15,7 +15,7 @@ import (
 	"github.com/maxmwang/scraie/flights/internal/analyze"
 	"github.com/maxmwang/scraie/flights/internal/config"
 	"github.com/maxmwang/scraie/flights/internal/db"
-	"github.com/maxmwang/scraie/flights/internal/search/serp"
+	"github.com/maxmwang/scraie/flights/internal/search/goflights"
 	"github.com/maxmwang/scraie/flights/internal/util"
 )
 
@@ -40,7 +40,7 @@ func Handle(ctx context.Context, args Args) {
 		return
 	}
 
-	searcher := serp.New(cfg.SerpAPIKey)
+	searcher := goflights.New()
 
 	var wg sync.WaitGroup
 	for _, it := range itineraries {
@@ -59,6 +59,7 @@ func Handle(ctx context.Context, args Args) {
 
 				if !args.Readonly {
 					for j, or := range result.Options {
+						// TODO: create a new dbclient in each goroutine
 						tx, err := pool.Begin(ctx)
 						if err != nil {
 							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction begin error")

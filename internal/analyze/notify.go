@@ -44,7 +44,7 @@ func constructDailyCheapestOptions(options []db.Option) []db.Option {
 	m := make(map[pgtype.Timestamptz]db.Option)
 
 	for _, opt := range options {
-		if minOpt, ok := m[opt.SearchedAt]; !ok || opt.Price < minOpt.Price {
+		if minOpt, ok := m[opt.SearchedAt]; !ok || priceFloat(opt.Price) < priceFloat(minOpt.Price) {
 			m[opt.SearchedAt] = opt
 		}
 	}
@@ -128,8 +128,8 @@ func buildEmbed(it db.Itinerary, options []db.Option, cheapest search.FlightOpti
 		return discordEmbed{}, fmt.Errorf("unexpected len(opions) < 2")
 	}
 
-	oldMin := options[len(options)-2].Price
-	newMin := options[len(options)-1].Price
+	oldMin := priceFloat(options[len(options)-2].Price)
+	newMin := priceFloat(options[len(options)-1].Price)
 	color := colorPriceRise
 	if newMin < oldMin {
 		color = colorPriceDrop
@@ -262,16 +262,16 @@ func labelOr(m map[int32]string, k int32) string {
 }
 
 // renderPriceNotification renders a colored summary of how the cheapest fare moved
-// from oldMin to newMin, e.g. "$999 → $842 | -$157 (-15.7%)". The block is
-// tinted green when the fare dropped and red when it rose. cur is the currency
-// symbol to prefix each amount with.
-func renderPriceNotification(cur string, newMin int32, checks checkResults) string {
+// from oldMin to newMin, e.g. "$999.00 → $842.00 | -$157.00 (-15.7%)". The block
+// is tinted green when the fare dropped and red when it rose. cur is the
+// currency symbol to prefix each amount with.
+func renderPriceNotification(cur string, newMin float64, checks checkResults) string {
 	s := strings.Builder{}
 
 	s.WriteString("```ansi\n")
 
 	if checks.near7DayMinimum.pass {
-		fmt.Fprintf(&s, "Near 7 Day Minimum: %s%d → %s%d\n",
+		fmt.Fprintf(&s, "Near 7 Day Minimum: %s%.2f → %s%.2f\n",
 			cur, checks.near7DayMinimum.prev7DayMinimum, cur, newMin)
 	}
 
@@ -291,10 +291,10 @@ func renderPriceNotification(cur string, newMin int32, checks checkResults) stri
 
 		percent := "0%"
 		if oldMin != 0 {
-			percent = fmt.Sprintf("%+.1f%%", float64(newMin-oldMin)/float64(oldMin)*100)
+			percent = fmt.Sprintf("%+.1f%%", (newMin-oldMin)/oldMin*100)
 		}
 
-		fmt.Fprintf(&s, "Price Movement:\t %s%s%d → %s%d | %s%s%d (%s)%s\n",
+		fmt.Fprintf(&s, "Price Movement:\t %s%s%.2f → %s%.2f | %s%s%.2f (%s)%s\n",
 			color, cur, oldMin, cur, newMin, sign, cur, diff, percent, ansiReset)
 	}
 

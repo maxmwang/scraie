@@ -1,6 +1,10 @@
 package serp
 
 import (
+	"math/big"
+
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search"
 )
@@ -81,7 +85,7 @@ func (r result) toDBResult(itineraryID int64) search.Result {
 			Option: db.Option{
 				ItineraryID:   itineraryID,
 				TotalDuration: int32(fo.TotalDuration),
-				Price:         int32(fo.Price),
+				Price:         pgtype.Numeric{Int: big.NewInt(int64(fo.Price)), Valid: true},
 				Type:          fo.Type,
 			},
 			Segments: segments,

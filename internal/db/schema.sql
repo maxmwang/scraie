@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS Options (
     itinerary_id     BIGINT      NOT NULL REFERENCES Itineraries(id),
 
     total_duration   INTEGER     NOT NULL,
-    price            INTEGER     NOT NULL,
+    price            NUMERIC     NOT NULL,
     type             TEXT        NOT NULL,
     searched_at      TIMESTAMPTZ NOT NULL
 );

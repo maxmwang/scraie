@@ -1,6 +1,7 @@
 package analyze
 
 import (
+	"math/big"
 	"testing"
 	"time"
 
@@ -10,10 +11,10 @@ import (
 )
 
 // opt builds a db.Option with just the fields the function under test reads.
-func opt(id int64, price int32, searchedAt time.Time) db.Option {
+func opt(id int64, price int64, searchedAt time.Time) db.Option {
 	return db.Option{
 		ID:         id,
-		Price:      price,
+		Price:      pgtype.Numeric{Int: big.NewInt(price), Valid: true},
 		SearchedAt: pgtype.Timestamptz{Time: searchedAt, Valid: true},
 	}
 }

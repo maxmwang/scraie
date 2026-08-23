@@ -1,0 +1,19 @@
+# Schedule for scraie.service: daily 02:00 PT, resuming the box from S3 if asleep.
+# Install to /etc/systemd/system/ -- must be a system timer, since WakeSystem=
+# needs CAP_WAKE_ALARM, which a rootless user manager does not have.
+#
+#   sudo systemctl enable --now scraie.timer
+#   systemctl list-timers scraie.timer         # NEXT / LAST
+[Unit]
+Description=Daily Scraie flight price scrape
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 America/Los_Angeles
+WakeSystem=true
+AccuracySec=1min
+# Fallback for a wake that never happens, or a night the box was fully off.
+# Fires exactly one catch-up run regardless of how many days were missed.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

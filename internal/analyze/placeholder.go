@@ -6,6 +6,7 @@ package analyze
 
 import (
 	"context"
+	"math/big"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,8 +26,8 @@ func SendPlaceholder(ctx context.Context) error {
 	}
 
 	options := []db.Option{
-		{SearchedAt: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -1)}, TotalDuration: 15*60 + 30, Price: 831},
-		{SearchedAt: pgtype.Timestamptz{Time: time.Now()}, TotalDuration: 15*60 + 30, Price: 842},
+		{SearchedAt: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -1)}, TotalDuration: 15*60 + 30, Price: pgtype.Numeric{Int: big.NewInt(83150), Exp: -2, Valid: true}},
+		{SearchedAt: pgtype.Timestamptz{Time: time.Now()}, TotalDuration: 15*60 + 30, Price: pgtype.Numeric{Int: big.NewInt(84200), Exp: -2, Valid: true}},
 	}
 	cheapest := search.FlightOptions{
 		Option: options[0],
