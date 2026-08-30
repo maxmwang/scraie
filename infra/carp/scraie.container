@@ -2,6 +2,7 @@
 # Install to /etc/containers/systemd/ -- daemon-reload generates scraie.service.
 # Triggered by scraie.timer. Secrets: /etc/scraie/scraie.env (root:root 0600).
 #
+#   sudo install -m 644 scraie.container /etc/containers/systemd/
 #   sudo /usr/libexec/podman/quadlet -dryrun   # preview generated unit, catch bad keys
 #   journalctl -u scraie.service -e            # logs
 [Unit]
@@ -11,6 +12,7 @@ Description=Scraie flight price scraping job
 ContainerName=scraie
 Image=docker.io/maxmwang/scraie:latest
 Pull=newer
+Exec=-readonly
 EnvironmentFile=/etc/scraie/scraie.env
 Environment=LOG_JSON=true
 
@@ -22,4 +24,4 @@ TimeoutStartSec=900
 ExecStartPre=/bin/sh -c 'until getent hosts www.google.com >/dev/null 2>&1; do sleep 5; done'
 # Return to S3 once the scrape finishes. Note this also fires when the run
 # fails; mask or comment out while debugging.
-ExecStopPost=/usr/bin/systemctl suspend
+; ExecStopPost=/usr/bin/systemctl suspend

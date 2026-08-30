@@ -1,0 +1,22 @@
+# Schedule for scraie.service: 06:00 and 18:00 ET. carpi is always online, so
+# there is nothing to wake and WakeSystem= is unset -- without it the timer needs
+# no CAP_WAKE_ALARM, which is what lets this run in the rootless user manager.
+# Install to ~/.config/systemd/user/. Lingering is required, or the timer only
+# runs while a login session is open.
+#
+#   install -Dm 644 scraie.timer ~/.config/systemd/user/scraie.timer
+#   sudo loginctl enable-linger "$USER"
+#   systemctl --user enable --now scraie.timer
+#   systemctl --user list-timers scraie.timer  # NEXT / LAST
+[Unit]
+Description=Twice-daily Scraie flight price scrape
+
+[Timer]
+OnCalendar=*-*-* 06,18:00:00 America/New_York
+AccuracySec=1min
+# Fallback for a run missed while the box was down. Fires exactly one catch-up
+# run regardless of how many were missed.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

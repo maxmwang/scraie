@@ -11,4 +11,4 @@ FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /scraie /usr/local/bin/scraie
 USER 65534:65534
-CMD ["/usr/local/bin/scraie"]
+ENTRYPOINT ["/usr/local/bin/scraie"]

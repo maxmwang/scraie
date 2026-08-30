@@ -27,6 +27,8 @@ type Args struct {
 func Handle(ctx context.Context, args Args) {
 	setupLogger()
 
+	log.Info().Bool("nosearch", args.NoSearch).Bool("readonly", args.Readonly).Msg("starting run")
+
 	cfg := config.Load()
 	ctx = context.WithValue(ctx, config.ContextKey, cfg)
 

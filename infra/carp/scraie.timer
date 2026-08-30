@@ -2,6 +2,7 @@
 # Install to /etc/systemd/system/ -- must be a system timer, since WakeSystem=
 # needs CAP_WAKE_ALARM, which a rootless user manager does not have.
 #
+#   sudo install -m 644 scraie.timer /etc/systemd/system/
 #   sudo systemctl enable --now scraie.timer
 #   systemctl list-timers scraie.timer         # NEXT / LAST
 [Unit]

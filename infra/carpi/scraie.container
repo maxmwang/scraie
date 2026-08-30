@@ -1,0 +1,29 @@
+# Twice-daily flight price scrape. Podman Quadlet, run to completion (oneshot).
+# Rootless: install to ~/.config/containers/systemd/ -- a --user daemon-reload
+# generates scraie.service. Triggered by scraie.timer, which never suspends the
+# box. Secrets: ~/.config/scraie/scraie.env (mode 0600).
+#
+#   install -Dm 644 scraie.container ~/.config/containers/systemd/scraie.container
+#   systemctl --user daemon-reload
+#   /usr/libexec/podman/quadlet -dryrun -user  # preview generated unit, catch bad keys
+#   sudo journalctl _SYSTEMD_USER_UNIT=scraie.service -f   # logs, no per-user journal here
+[Unit]
+Description=Scraie flight price scraping job
+
+[Container]
+ContainerName=scraie
+Image=docker.io/maxmwang/scraie:latest
+Pull=newer
+EnvironmentFile=/home/max/.config/scraie/scraie.env
+Environment=LOG_JSON=true
+# conmon writes container output straight to the unit's stdout. The default
+# journald driver adds a second copy of its own, so every line lands twice.
+# Trade-off: podman logs has nothing to read, use journalctl.
+LogDriver=passthrough
+
+[Service]
+Type=oneshot
+TimeoutStartSec=900
+# Persistent=true can fire a catch-up run the instant the box boots, before DHCP
+# settles, so poll for real DNS rather than trusting network-online.target.
+ExecStartPre=/bin/sh -c 'until getent hosts www.google.com >/dev/null 2>&1; do sleep 5; done'
