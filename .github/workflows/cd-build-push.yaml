@@ -4,10 +4,8 @@ on:
   push:
     branches:
       - main
-    paths:
-      - .github/workflows/cd-build-push.yaml
-      - cmd
-      - internal
+    paths-ignore:
+      - infra
 
 jobs:
   build-push-image:
