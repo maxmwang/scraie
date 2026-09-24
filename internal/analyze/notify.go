@@ -36,11 +36,11 @@ const (
 
 const NumDaysToPlot = 60
 
-// constructDailyCheapestOptions returns a sorted list containing the cheapest
+// constructTimestampCheapestOptions returns a sorted list containing the cheapest
 // option from each distinct timestamp. Since a single scheduled function run
-// will reuse a single timestamp for all scraped options, we expect about 1
-// timestamp per day shared with many options.
-func constructDailyCheapestOptions(options []db.Option) []db.Option {
+// will reuse a single timestamp for all scraped options, we expect each
+// timestamp to have many options.
+func constructTimestampCheapestOptions(options []db.Option) []db.Option {
 	m := make(map[pgtype.Timestamptz]db.Option)
 
 	for _, opt := range options {
@@ -87,7 +87,7 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 		// Nothing has been searched recently: nothing to compare or report.
 		return nil
 	}
-	cheapestOptions := constructDailyCheapestOptions(options)
+	cheapestOptions := constructTimestampCheapestOptions(options)
 
 	checks := makeChecks(cheapestOptions)
 	if !checks.any() {
@@ -130,9 +130,9 @@ func buildEmbed(it db.Itinerary, options []db.Option, cheapest search.FlightOpti
 
 	oldMin := priceFloat(options[len(options)-2].Price)
 	newMin := priceFloat(options[len(options)-1].Price)
-	color := colorPriceRise
-	if newMin < oldMin {
-		color = colorPriceDrop
+	color := colorPriceDrop
+	if newMin > oldMin {
+		color = colorPriceRise
 	}
 
 	itinerarySummary := renderItinerarySummary(it)
