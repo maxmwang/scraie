@@ -278,7 +278,7 @@ func renderPriceNotification(cur string, newMin float64, checks checkResults) st
 	if checks.near7DayMinimum.pass || checks.priceMovement.pass {
 		oldMin := checks.priceMovement.prev
 		color := ansiRed
-		if newMin < oldMin {
+		if newMin <= oldMin {
 			color = ansiGreen
 		}
 
