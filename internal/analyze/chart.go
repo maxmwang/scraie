@@ -11,37 +11,38 @@ import (
 	"github.com/maxmwang/scraie/flights/internal/util"
 )
 
-// dailyMinimumPriceSeries returns two series, the first mapping onto the
+// timestampMinimumPriceSeries returns two series, the first mapping onto the
 // second (ie. X and Y-axis values). The Xs are dates in ascending order. The
-// Ys are the minimum observed search.FlightOptions price on each day. Each X
-// value is anchored to the start of that day in the observation's own
-// location.
-func dailyMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
-	minByDay := make(map[time.Time]float64)
+// Ys are the minimum observed search.FlightOptions price on each timetsamp.
+// Each X value is anchored to the start of that timetsamp in the observation's
+// own location.
+func timestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
+	minByTimestamp := make(map[time.Time]float64)
 	for _, o := range history {
 		if !o.SearchedAt.Valid {
 			continue
 		}
 		t := o.SearchedAt.Time
 		y, m, d := t.Date()
-		day := time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+		h, _, _ := t.Clock()
+		timestamp := time.Date(y, m, d, h, 0, 0, 0, t.Location())
 		price := priceFloat(o.Price)
-		if cur, ok := minByDay[day]; !ok || price < cur {
-			minByDay[day] = price
+		if cur, ok := minByTimestamp[timestamp]; !ok || price < cur {
+			minByTimestamp[timestamp] = price
 		}
 	}
 
-	days := make([]time.Time, 0, len(minByDay))
-	for day := range minByDay {
-		days = append(days, day)
+	timestamps := make([]time.Time, 0, len(minByTimestamp))
+	for timestamp := range minByTimestamp {
+		timestamps = append(timestamps, timestamp)
 	}
-	sort.Slice(days, func(a, b int) bool { return days[a].Before(days[b]) })
+	sort.Slice(timestamps, func(a, b int) bool { return timestamps[a].Before(timestamps[b]) })
 
-	xs := make([]time.Time, len(days))
-	ys := make([]float64, len(days))
-	for i, day := range days {
-		xs[i] = day
-		ys[i] = minByDay[day]
+	xs := make([]time.Time, len(timestamps))
+	ys := make([]float64, len(timestamps))
+	for i, timestamp := range timestamps {
+		xs[i] = timestamp
+		ys[i] = minByTimestamp[timestamp]
 	}
 	return xs, ys
 }
@@ -51,7 +52,7 @@ func dailyMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 // suitable for use as a Discord embed image. It returns "" (without error) when
 // there is no data to plot.
 func buildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysToChart int) (string, error) {
-	xs, ys := dailyMinimumPriceSeries(history)
+	xs, ys := timestampMinimumPriceSeries(history)
 	if len(xs) == 0 {
 		return "", nil
 	}
