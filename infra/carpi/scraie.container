@@ -13,7 +13,7 @@ Description=Scraie flight price scraping job
 [Container]
 ContainerName=scraie
 Image=docker.io/maxmwang/scraie:latest
-Pull=newer
+Pull=always
 EnvironmentFile=/home/max/.config/scraie/scraie.env
 Environment=LOG_JSON=true
 # conmon writes container output straight to the unit's stdout. The default
