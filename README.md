@@ -1,19 +1,19 @@
 # scraie
 
-Scrapes Google Flights prices for a list of itineraries daily using [SerpAPI](https://serpapi.com/google-flights-api) and stores results in a Supabase database, building a price history suitable for graphing.
+Scrapes Google Flights prices for a list of itineraries daily using [goflights](https://pkg.go.dev/github.com/maxmwang/goflights) and stores results in a Supabase database, building a price history suitable for graphing.
 
 ## Setup
 
-1. Copy `.env` and fill in your SerpAPI key:
+To run locally:
 
-   ```
-   SCRAIE_SERPAPI_KEY=_
-   SCRAIE_DB_URI=_
-   SCRAIE_DISCORD_WEBHOOK=_
-   ```
+```bash
+# ./packages/scraie/flights
+FLIGHTS_SERPAPI_KEY=_ \
+FLIGHTS_DB_URI=_ \
+SCRAIE_DISCORD_WEBHOOK=_ \
+go run ./cmd/scraie -nosearch -readonly
+```
 
-2. Local run:
-   ```bash
-   # ./packages/scraie/flights
-   go run ./cmd/scraie
-   ```
+## Deployment
+
+Github Actions automatically build and push the latest commit into a container and onto Docker Hub. `carpi.container` is configured with `Container.Pull=always`, so the latest commit should always be pulled.

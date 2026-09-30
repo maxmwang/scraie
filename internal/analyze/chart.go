@@ -63,7 +63,7 @@ func buildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 
 	labels := make([]string, len(xs))
 	for i, t := range xs {
-		labels[i] = t.Format("Jan 2")
+		labels[i] = t.Format(time.Stamp)
 	}
 
 	config := map[string]any{
