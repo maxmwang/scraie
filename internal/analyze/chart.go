@@ -47,6 +47,8 @@ func timestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 	return xs, ys
 }
 
+// TODO: download image instead of using link because link will exceed character limit
+
 // buildDailyMinimumPriceChartURL renders the recent daily-minimum price history
 // as a QuickChart (https://quickchart.io) line chart and returns its image URL,
 // suitable for use as a Discord embed image. It returns "" (without error) when

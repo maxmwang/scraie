@@ -34,7 +34,7 @@ const (
 	ansiRed   = "[1;31m"
 )
 
-const NumDaysToPlot = 60
+const NumPointsToPlot = 30
 
 // constructTimestampCheapestOptions returns a sorted list containing the cheapest
 // option from each distinct timestamp. Since a single scheduled function run
@@ -73,7 +73,7 @@ func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerar
 
 	since30Days := pgtype.Timestamptz{
 		// +1hour in case of small function run scheduling variance
-		Time:  time.Now().AddDate(0, 0, -NumDaysToPlot).Add(-time.Hour),
+		Time:  time.Now().AddDate(0, 0, -NumPointsToPlot).Add(-time.Hour),
 		Valid: true,
 	}
 	options, err := dbc.GetOptionsSince(ctx, db.GetOptionsSinceParams{
@@ -154,7 +154,7 @@ func buildEmbed(it db.Itinerary, options []db.Option, cheapest search.FlightOpti
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	chart, err := buildDailyMinimumPriceChartURL(it, options, NumDaysToPlot)
+	chart, err := buildDailyMinimumPriceChartURL(it, options, NumPointsToPlot)
 	if err != nil || chart == "" {
 		// error is non-fatal: log error and continue sending message
 		log.Error().Err(err).Msg("failed to build buildDailyMinimumPriceChartURL chart")
