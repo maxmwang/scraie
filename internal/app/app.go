@@ -3,13 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/maxmwang/scraie/flights/internal/analyze"
@@ -25,8 +22,6 @@ type Args struct {
 }
 
 func Handle(ctx context.Context, args Args) {
-	setupLogger()
-
 	log.Info().Bool("nosearch", args.NoSearch).Bool("readonly", args.Readonly).Msg("starting run")
 
 	cfg := config.Load()
@@ -143,16 +138,4 @@ func Handle(ctx context.Context, args Args) {
 		})
 	}
 	wg.Wait()
-}
-
-func setupLogger() {
-	if b, err := strconv.ParseBool(os.Getenv("LOG_JSON")); err == nil && b == true {
-		log.Logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
-	} else {
-		log.Logger = log.Output(zerolog.ConsoleWriter{
-			Out:        os.Stdout,
-			NoColor:    false,
-			TimeFormat: time.DateTime,
-		})
-	}
 }
