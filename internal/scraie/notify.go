@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
 	"github.com/maxmwang/scraie/flights/internal/config"
@@ -68,9 +67,7 @@ func constructTimestampCheapestOptions(options []db.Option) []db.Option {
 // The Discord webhook is read from the config on the context
 // (config.Config.DiscordWebhook). If it is empty, or there is nothing meaningful
 // to compare, no message is sent.
-func NotifyOnPriceChange(ctx context.Context, pool *pgxpool.Pool, it db.Itinerary) error {
-	dbc := db.New(pool)
-
+func NotifyOnPriceChange(ctx context.Context, dbc *db.Queries, it db.Itinerary) error {
 	since30Days := pgtype.Timestamptz{
 		// +1hour in case of small function run scheduling variance
 		Time:  time.Now().AddDate(0, 0, -NumPointsToPlot).Add(-time.Hour),

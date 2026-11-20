@@ -40,6 +40,9 @@ func Handle(ctx context.Context, args Args) {
 
 	var wg sync.WaitGroup
 	for _, it := range itineraries {
+		if it.Invalid {
+			continue
+		}
 		wg.Go(func() {
 			if !args.NoSearch {
 				result, err := searcher.Search(it)
@@ -55,7 +58,6 @@ func Handle(ctx context.Context, args Args) {
 
 				if !args.Readonly {
 					for j, or := range result.Options {
-						// TODO: create a new dbclient in each goroutine
 						tx, err := pool.Begin(ctx)
 						if err != nil {
 							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction begin error")
@@ -129,7 +131,7 @@ func Handle(ctx context.Context, args Args) {
 			}
 
 			if it.Notify {
-				err = NotifyOnPriceChange(ctx, pool, it)
+				err = NotifyOnPriceChange(ctx, dbClient, it)
 				if err != nil {
 					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary discord notify")
 				}
