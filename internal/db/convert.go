@@ -1,0 +1,37 @@
+package db
+
+func ToUpdateParams(i Itinerary) UpdateItineraryParams {
+	return UpdateItineraryParams{
+		ID:              i.ID,
+		DepartureID:     i.DepartureID,
+		ArrivalID:       i.ArrivalID,
+		Type:            i.Type,
+		OutboundDate:    i.OutboundDate,
+		ReturnDate:      i.ReturnDate,
+		TravelClass:     i.TravelClass,
+		ShowHidden:      i.ShowHidden,
+		MultiCityJson:   i.MultiCityJson,
+		ExcludeBasic:    i.ExcludeBasic,
+		DeepSearch:      i.DeepSearch,
+		Adults:          i.Adults,
+		Children:        i.Children,
+		InfantsInSeat:   i.InfantsInSeat,
+		InfantsOnLap:    i.InfantsOnLap,
+		SortBy:          i.SortBy,
+		Stops:           i.Stops,
+		ExcludeAirlines: i.ExcludeAirlines,
+		IncludeAirlines: i.IncludeAirlines,
+		Bags:            i.Bags,
+		MaxPrice:        i.MaxPrice,
+		OutboundTimes:   i.OutboundTimes,
+		ReturnTimes:     i.ReturnTimes,
+		Emissions:       i.Emissions,
+		LayoverDuration: i.LayoverDuration,
+		ExcludeConns:    i.ExcludeConns,
+		MaxDuration:     i.MaxDuration,
+		Gl:              i.Gl,
+		Hl:              i.Hl,
+		Currency:        i.Currency,
+		Description:     i.Description,
+	}
+}

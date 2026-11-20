@@ -346,3 +346,113 @@ func (q *Queries) InvalidateItinerary(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, invalidateItinerary, id)
 	return err
 }
+
+const updateItinerary = `-- name: UpdateItinerary :one
+UPDATE itineraries
+SET
+    departure_id     = $2,
+    arrival_id       = $3,
+    type             = $4,
+    outbound_date    = $5,
+    return_date      = $6,
+    travel_class     = $7,
+    show_hidden      = $8,
+    multi_city_json  = $9,
+    exclude_basic    = $10,
+    deep_search      = $11,
+    adults           = $12,
+    children         = $13,
+    infants_in_seat  = $14,
+    infants_on_lap   = $15,
+    sort_by          = $16,
+    stops            = $17,
+    exclude_airlines = $18,
+    include_airlines = $19,
+    bags             = $20,
+    max_price        = $21,
+    outbound_times   = $22,
+    return_times     = $23,
+    emissions        = $24,
+    layover_duration = $25,
+    exclude_conns    = $26,
+    max_duration     = $27,
+    gl               = $28,
+    hl               = $29,
+    currency         = $30,
+    description      = $31
+WHERE id = $1
+RETURNING id
+`
+
+type UpdateItineraryParams struct {
+	ID              int64
+	DepartureID     string
+	ArrivalID       string
+	Type            int32
+	OutboundDate    string
+	ReturnDate      pgtype.Text
+	TravelClass     int32
+	ShowHidden      bool
+	MultiCityJson   pgtype.Text
+	ExcludeBasic    bool
+	DeepSearch      bool
+	Adults          int32
+	Children        int32
+	InfantsInSeat   int32
+	InfantsOnLap    int32
+	SortBy          int32
+	Stops           int32
+	ExcludeAirlines pgtype.Text
+	IncludeAirlines pgtype.Text
+	Bags            int32
+	MaxPrice        pgtype.Int4
+	OutboundTimes   pgtype.Text
+	ReturnTimes     pgtype.Text
+	Emissions       pgtype.Int4
+	LayoverDuration pgtype.Text
+	ExcludeConns    pgtype.Text
+	MaxDuration     pgtype.Int4
+	Gl              string
+	Hl              string
+	Currency        string
+	Description     pgtype.Text
+}
+
+func (q *Queries) UpdateItinerary(ctx context.Context, arg UpdateItineraryParams) (int64, error) {
+	row := q.db.QueryRow(ctx, updateItinerary,
+		arg.ID,
+		arg.DepartureID,
+		arg.ArrivalID,
+		arg.Type,
+		arg.OutboundDate,
+		arg.ReturnDate,
+		arg.TravelClass,
+		arg.ShowHidden,
+		arg.MultiCityJson,
+		arg.ExcludeBasic,
+		arg.DeepSearch,
+		arg.Adults,
+		arg.Children,
+		arg.InfantsInSeat,
+		arg.InfantsOnLap,
+		arg.SortBy,
+		arg.Stops,
+		arg.ExcludeAirlines,
+		arg.IncludeAirlines,
+		arg.Bags,
+		arg.MaxPrice,
+		arg.OutboundTimes,
+		arg.ReturnTimes,
+		arg.Emissions,
+		arg.LayoverDuration,
+		arg.ExcludeConns,
+		arg.MaxDuration,
+		arg.Gl,
+		arg.Hl,
+		arg.Currency,
+		arg.Description,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}

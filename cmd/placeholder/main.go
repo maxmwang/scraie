@@ -1,7 +1,7 @@
 package main
 
 // For testing: placeholder command — remove cmd/placeholder and
-// internal/analyze/placeholder.go when done.
+// internal/scraie/placeholder.go when done.
 //
 // Run with your webhook set:
 //   SCRAIE_DISCORD_WEBHOOK=... go run ./cmd/placeholder
@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/maxmwang/scraie/flights/internal/analyze"
 	"github.com/maxmwang/scraie/flights/internal/config"
+	"github.com/maxmwang/scraie/flights/internal/scraie"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	}
 
 	ctx := context.WithValue(context.Background(), config.ContextKey, config.Config{DiscordWebhook: webhook})
-	if err := analyze.SendPlaceholder(ctx); err != nil {
+	if err := scraie.SendPlaceholder(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "send failed:", err)
 		os.Exit(1)
 	}

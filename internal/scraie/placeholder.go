@@ -1,4 +1,4 @@
-package analyze
+package scraie
 
 // TEMPORARY placeholder — remove this file (and cmd/placeholder) when done.
 // It sends a hardcoded price-change notification through the real embed + webhook

@@ -1,4 +1,4 @@
-package analyze
+package scraie
 
 import (
 	"math/big"

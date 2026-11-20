@@ -1,4 +1,4 @@
-package app
+package scraie
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 
-	"github.com/maxmwang/scraie/flights/internal/analyze"
 	"github.com/maxmwang/scraie/flights/internal/config"
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search/goflights"
@@ -130,7 +129,7 @@ func Handle(ctx context.Context, args Args) {
 			}
 
 			if it.Notify {
-				err = analyze.NotifyOnPriceChange(ctx, pool, it)
+				err = NotifyOnPriceChange(ctx, pool, it)
 				if err != nil {
 					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary discord notify")
 				}

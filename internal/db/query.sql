@@ -20,6 +20,42 @@ VALUES (
 )
 RETURNING id;
 
+-- name: UpdateItinerary :one
+UPDATE itineraries
+SET
+    departure_id     = $2,
+    arrival_id       = $3,
+    type             = $4,
+    outbound_date    = $5,
+    return_date      = $6,
+    travel_class     = $7,
+    show_hidden      = $8,
+    multi_city_json  = $9,
+    exclude_basic    = $10,
+    deep_search      = $11,
+    adults           = $12,
+    children         = $13,
+    infants_in_seat  = $14,
+    infants_on_lap   = $15,
+    sort_by          = $16,
+    stops            = $17,
+    exclude_airlines = $18,
+    include_airlines = $19,
+    bags             = $20,
+    max_price        = $21,
+    outbound_times   = $22,
+    return_times     = $23,
+    emissions        = $24,
+    layover_duration = $25,
+    exclude_conns    = $26,
+    max_duration     = $27,
+    gl               = $28,
+    hl               = $29,
+    currency         = $30,
+    description      = $31
+WHERE id = $1
+RETURNING id;
+
 -- name: InvalidateItinerary :exec
 UPDATE itineraries SET invalid = TRUE WHERE id = $1;
 
