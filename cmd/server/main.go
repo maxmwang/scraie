@@ -27,7 +27,7 @@ func main() {
 	noSearch := flag.Bool("no-search", false, "Don't execute scraie searches")
 	readOnly := flag.Bool("read-only", false, "Don't write options to the database")
 	timezone := flag.String("timezone", "", "Timezone used for scheduled runs")
-	scheduleHours := flag.String("schedule-hours", "6,18", "Comma-separated hours to run, from 0 to 23")
+	scheduleHours := flag.String("schedule-hours", "3,15", "Comma-separated hours to run, from 0 to 23")
 	runImmediately := flag.Bool("run-on-start", false, "Run once immediately when the server starts")
 	flag.Parse()
 
