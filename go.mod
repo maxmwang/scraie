@@ -11,6 +11,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/serpapi/serpapi-golang v0.0.0-20260126142127-0e41c7993cda
 	golang.org/x/sync v0.20.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -23,5 +24,4 @@ require (
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 )
