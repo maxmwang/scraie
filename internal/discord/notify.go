@@ -16,8 +16,8 @@ import (
 )
 
 type notifier struct {
-	session   *discordgo.Session
-	channelID string
+	session *discordgo.Session
+	db      *db.Queries
 }
 
 var (
@@ -272,7 +272,15 @@ func (n *notifier) Notify(ctx context.Context, notification scraie.Notification)
 		embed.Image = &discordgo.MessageEmbedImage{URL: chart}
 	}
 
-	_, err := n.session.ChannelMessageSendComplex(n.channelID, &discordgo.MessageSend{
+	user, err := n.db.GetUserByID(ctx, notification.Itinerary.UserID)
+	if err != nil {
+		return fmt.Errorf("get notification recipient: %w", err)
+	}
+	channel, err := n.session.UserChannelCreate(user.DiscordID)
+	if err != nil {
+		return fmt.Errorf("create direct message channel: %w", err)
+	}
+	_, err = n.session.ChannelMessageSendComplex(channel.ID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{embed},
 	})
 	return err

@@ -1,9 +1,26 @@
 -- name: GetItineraries :many
 SELECT * FROM itineraries;
 
+-- name: GetItinerary :one
+SELECT * FROM itineraries WHERE id = $1;
+
+-- name: GetUserByDiscordID :one
+SELECT id, discord_id FROM users WHERE discord_id = $1;
+
+-- name: CreateDiscordUser :one
+INSERT INTO users (id, discord_id)
+VALUES ($1, $2)
+RETURNING id;
+
+-- name: GetUserByID :one
+SELECT id, discord_id FROM users WHERE id = $1;
+
+-- name: GetItinerariesByUser :many
+SELECT * FROM itineraries WHERE user_id = $1;
+
 -- name: CreateItinerary :one
 INSERT INTO itineraries (
-    departure_id, arrival_id, type, outbound_date, return_date, travel_class,
+    user_id, departure_id, arrival_id, type, outbound_date, return_date, travel_class,
     show_hidden, multi_city_json, exclude_basic, deep_search,
     adults, children, infants_in_seat, infants_on_lap,
     sort_by, stops, exclude_airlines, include_airlines, bags, max_price,
@@ -11,12 +28,12 @@ INSERT INTO itineraries (
     max_duration, gl, hl, currency
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10,
-    $11, $12, $13, $14,
-    $15, $16, $17, $18, $19, $20,
-    $21, $22, $23, $24, $25,
-    $26, $27, $28, $29
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14, $15,
+    $16, $17, $18, $19, $20, $21,
+    $22, $23, $24, $25, $26, $27,
+    $28, $29, $30
 )
 RETURNING id;
 
@@ -62,8 +79,7 @@ UPDATE itineraries SET invalid = TRUE WHERE id = $1;
 -- name: GetOptionsSince :many
 -- Returns every option saved for an itinerary at or after the given timestamp,
 -- ordered oldest first. Used to chart the recent price history of a flight.
-SELECT id, itinerary_id, total_duration, price, type, searched_at
-FROM options
+SELECT * FROM options
 WHERE itinerary_id = $1 AND searched_at >= $2
 ORDER BY searched_at;
 

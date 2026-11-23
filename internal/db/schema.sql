@@ -1,6 +1,12 @@
+CREATE TABLE IF NOT EXISTS Users (
+    id         UUID PRIMARY KEY,
+    discord_id TEXT NOT NULL UNIQUE
+);
+
 -- Stores inputs to SerpAPI (https://serpapi.com/google-flights-api)
 CREATE TABLE IF NOT EXISTS Itineraries (
     id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id          UUID NOT NULL REFERENCES Users(id) ON DELETE CASCADE,
 
     departure_id     TEXT    NOT NULL,
     arrival_id       TEXT    NOT NULL,

@@ -10,6 +10,7 @@ import (
 
 type Itinerary struct {
 	ID              int64
+	UserID          pgtype.UUID
 	DepartureID     string
 	ArrivalID       string
 	Type            int32
@@ -78,4 +79,9 @@ type Segment struct {
 	TravelClass          string
 	FlightNumber         string
 	Overnight            bool
+}
+
+type User struct {
+	ID        pgtype.UUID
+	DiscordID string
 }

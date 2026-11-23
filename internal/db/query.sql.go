@@ -44,9 +44,27 @@ type BulkInsertSegmentsParams struct {
 	Overnight            bool
 }
 
+const createDiscordUser = `-- name: CreateDiscordUser :one
+INSERT INTO users (id, discord_id)
+VALUES ($1, $2)
+RETURNING id
+`
+
+type CreateDiscordUserParams struct {
+	ID        pgtype.UUID
+	DiscordID string
+}
+
+func (q *Queries) CreateDiscordUser(ctx context.Context, arg CreateDiscordUserParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, createDiscordUser, arg.ID, arg.DiscordID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createItinerary = `-- name: CreateItinerary :one
 INSERT INTO itineraries (
-    departure_id, arrival_id, type, outbound_date, return_date, travel_class,
+    user_id, departure_id, arrival_id, type, outbound_date, return_date, travel_class,
     show_hidden, multi_city_json, exclude_basic, deep_search,
     adults, children, infants_in_seat, infants_on_lap,
     sort_by, stops, exclude_airlines, include_airlines, bags, max_price,
@@ -54,17 +72,18 @@ INSERT INTO itineraries (
     max_duration, gl, hl, currency
 )
 VALUES (
-    $1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10,
-    $11, $12, $13, $14,
-    $15, $16, $17, $18, $19, $20,
-    $21, $22, $23, $24, $25,
-    $26, $27, $28, $29
+    $1, $2, $3, $4, $5, $6, $7,
+    $8, $9, $10, $11,
+    $12, $13, $14, $15,
+    $16, $17, $18, $19, $20, $21,
+    $22, $23, $24, $25, $26, $27,
+    $28, $29, $30
 )
 RETURNING id
 `
 
 type CreateItineraryParams struct {
+	UserID          pgtype.UUID
 	DepartureID     string
 	ArrivalID       string
 	Type            int32
@@ -98,6 +117,7 @@ type CreateItineraryParams struct {
 
 func (q *Queries) CreateItinerary(ctx context.Context, arg CreateItineraryParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createItinerary,
+		arg.UserID,
 		arg.DepartureID,
 		arg.ArrivalID,
 		arg.Type,
@@ -161,7 +181,7 @@ func (q *Queries) CreateOption(ctx context.Context, arg CreateOptionParams) (int
 }
 
 const getItineraries = `-- name: GetItineraries :many
-SELECT id, departure_id, arrival_id, type, outbound_date, return_date, travel_class, show_hidden, multi_city_json, exclude_basic, deep_search, adults, children, infants_in_seat, infants_on_lap, sort_by, stops, exclude_airlines, include_airlines, bags, max_price, outbound_times, return_times, emissions, layover_duration, exclude_conns, max_duration, gl, hl, currency, invalid, notify, description FROM itineraries
+SELECT id, user_id, departure_id, arrival_id, type, outbound_date, return_date, travel_class, show_hidden, multi_city_json, exclude_basic, deep_search, adults, children, infants_in_seat, infants_on_lap, sort_by, stops, exclude_airlines, include_airlines, bags, max_price, outbound_times, return_times, emissions, layover_duration, exclude_conns, max_duration, gl, hl, currency, invalid, notify, description FROM itineraries
 `
 
 func (q *Queries) GetItineraries(ctx context.Context) ([]Itinerary, error) {
@@ -175,6 +195,7 @@ func (q *Queries) GetItineraries(ctx context.Context) ([]Itinerary, error) {
 		var i Itinerary
 		if err := rows.Scan(
 			&i.ID,
+			&i.UserID,
 			&i.DepartureID,
 			&i.ArrivalID,
 			&i.Type,
@@ -218,6 +239,111 @@ func (q *Queries) GetItineraries(ctx context.Context) ([]Itinerary, error) {
 	return items, nil
 }
 
+const getItinerariesByUser = `-- name: GetItinerariesByUser :many
+SELECT id, user_id, departure_id, arrival_id, type, outbound_date, return_date, travel_class, show_hidden, multi_city_json, exclude_basic, deep_search, adults, children, infants_in_seat, infants_on_lap, sort_by, stops, exclude_airlines, include_airlines, bags, max_price, outbound_times, return_times, emissions, layover_duration, exclude_conns, max_duration, gl, hl, currency, invalid, notify, description FROM itineraries WHERE user_id = $1
+`
+
+func (q *Queries) GetItinerariesByUser(ctx context.Context, userID pgtype.UUID) ([]Itinerary, error) {
+	rows, err := q.db.Query(ctx, getItinerariesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Itinerary
+	for rows.Next() {
+		var i Itinerary
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DepartureID,
+			&i.ArrivalID,
+			&i.Type,
+			&i.OutboundDate,
+			&i.ReturnDate,
+			&i.TravelClass,
+			&i.ShowHidden,
+			&i.MultiCityJson,
+			&i.ExcludeBasic,
+			&i.DeepSearch,
+			&i.Adults,
+			&i.Children,
+			&i.InfantsInSeat,
+			&i.InfantsOnLap,
+			&i.SortBy,
+			&i.Stops,
+			&i.ExcludeAirlines,
+			&i.IncludeAirlines,
+			&i.Bags,
+			&i.MaxPrice,
+			&i.OutboundTimes,
+			&i.ReturnTimes,
+			&i.Emissions,
+			&i.LayoverDuration,
+			&i.ExcludeConns,
+			&i.MaxDuration,
+			&i.Gl,
+			&i.Hl,
+			&i.Currency,
+			&i.Invalid,
+			&i.Notify,
+			&i.Description,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getItinerary = `-- name: GetItinerary :one
+SELECT id, user_id, departure_id, arrival_id, type, outbound_date, return_date, travel_class, show_hidden, multi_city_json, exclude_basic, deep_search, adults, children, infants_in_seat, infants_on_lap, sort_by, stops, exclude_airlines, include_airlines, bags, max_price, outbound_times, return_times, emissions, layover_duration, exclude_conns, max_duration, gl, hl, currency, invalid, notify, description FROM itineraries WHERE id = $1
+`
+
+func (q *Queries) GetItinerary(ctx context.Context, id int64) (Itinerary, error) {
+	row := q.db.QueryRow(ctx, getItinerary, id)
+	var i Itinerary
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.DepartureID,
+		&i.ArrivalID,
+		&i.Type,
+		&i.OutboundDate,
+		&i.ReturnDate,
+		&i.TravelClass,
+		&i.ShowHidden,
+		&i.MultiCityJson,
+		&i.ExcludeBasic,
+		&i.DeepSearch,
+		&i.Adults,
+		&i.Children,
+		&i.InfantsInSeat,
+		&i.InfantsOnLap,
+		&i.SortBy,
+		&i.Stops,
+		&i.ExcludeAirlines,
+		&i.IncludeAirlines,
+		&i.Bags,
+		&i.MaxPrice,
+		&i.OutboundTimes,
+		&i.ReturnTimes,
+		&i.Emissions,
+		&i.LayoverDuration,
+		&i.ExcludeConns,
+		&i.MaxDuration,
+		&i.Gl,
+		&i.Hl,
+		&i.Currency,
+		&i.Invalid,
+		&i.Notify,
+		&i.Description,
+	)
+	return i, err
+}
+
 const getLayoversByOptionIDs = `-- name: GetLayoversByOptionIDs :many
 SELECT id, option_id, duration, name, airport_id, overnight
 FROM layover
@@ -252,8 +378,7 @@ func (q *Queries) GetLayoversByOptionIDs(ctx context.Context, dollar_1 []int64) 
 }
 
 const getOptionsSince = `-- name: GetOptionsSince :many
-SELECT id, itinerary_id, total_duration, price, type, searched_at
-FROM options
+SELECT id, itinerary_id, total_duration, price, type, searched_at FROM options
 WHERE itinerary_id = $1 AND searched_at >= $2
 ORDER BY searched_at
 `
@@ -336,6 +461,28 @@ func (q *Queries) GetSegmentsByOptionIDs(ctx context.Context, dollar_1 []int64) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const getUserByDiscordID = `-- name: GetUserByDiscordID :one
+SELECT id, discord_id FROM users WHERE discord_id = $1
+`
+
+func (q *Queries) GetUserByDiscordID(ctx context.Context, discordID string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByDiscordID, discordID)
+	var i User
+	err := row.Scan(&i.ID, &i.DiscordID)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, discord_id FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i User
+	err := row.Scan(&i.ID, &i.DiscordID)
+	return i, err
 }
 
 const invalidateItinerary = `-- name: InvalidateItinerary :exec
