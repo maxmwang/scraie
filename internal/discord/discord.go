@@ -6,16 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/maxmwang/scraie/flights/internal/config"
 	"github.com/maxmwang/scraie/flights/internal/db"
+	"github.com/maxmwang/scraie/flights/internal/scraie"
 )
 
 // ---------- commands ----------
@@ -400,15 +400,22 @@ func summary(it db.Itinerary) string {
 	return s
 }
 
-func Handle(ctx context.Context) error {
-	cfg := config.LoadBot()
+type Bot struct {
+	session   *discordgo.Session
+	channelID string
+	pool      *pgxpool.Pool
+	closeOnce sync.Once
+}
+
+func New(ctx context.Context) (*Bot, error) {
+	cfg := config.FromContext(ctx)
 	ctx = context.WithValue(ctx, config.ContextKey, cfg)
 	pool := db.Connect(ctx)
-	defer pool.Close()
 
 	s, err := discordgo.New("Bot " + cfg.DiscordBotToken)
 	if err != nil {
-		return err
+		pool.Close()
+		return nil, err
 	}
 	b := bot{db: db.New(pool)}
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -424,18 +431,46 @@ func Handle(ctx context.Context) error {
 		}
 	})
 	if err := s.Open(); err != nil {
-		return err
+		pool.Close()
+		return nil, err
 	}
-	defer s.Close()
 	for _, command := range commands {
 		if _, err := s.ApplicationCommandCreate(s.State.User.ID, "", command); err != nil {
-			return err
+			s.Close()
+			pool.Close()
+			return nil, err
 		}
 	}
 
 	log.Println("bot is running")
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
-	return nil
+	return &Bot{
+		session:   s,
+		channelID: cfg.DiscordChannelID,
+		pool:      pool,
+	}, nil
+}
+
+func (b *Bot) Run(ctx context.Context) error {
+	defer b.Close()
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (b *Bot) Close() {
+	b.closeOnce.Do(func() {
+		b.session.Close()
+		b.pool.Close()
+	})
+}
+
+func (b *Bot) Notifier() scraie.Notifier {
+	return &notifier{session: b.session, channelID: b.channelID}
+}
+
+func Handle(ctx context.Context) error {
+	b, err := New(ctx)
+	if err != nil {
+		return err
+	}
+	return b.Run(ctx)
 }

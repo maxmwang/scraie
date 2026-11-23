@@ -10,6 +10,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const ContextKey = "scraie:db_pool"
+
 //go:embed schema.sql
 var schema string
 
@@ -24,4 +26,13 @@ func Connect(ctx context.Context) *pgxpool.Pool {
 	}
 
 	return pool
+}
+
+func FromContext(ctx context.Context) *pgxpool.Pool {
+	poolRaw := ctx.Value(ContextKey)
+	if pool, ok := poolRaw.(*pgxpool.Pool); !ok {
+		return Connect(ctx)
+	} else {
+		return pool
+	}
 }

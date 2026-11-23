@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	nethttp "net/http"
-	"os"
-	"os/signal"
-	"syscall"
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/middleware"
@@ -24,7 +21,7 @@ type Args struct {
 	IdleTimeout  time.Duration
 }
 
-func NewHandler(ctx context.Context, dbClient *db.Queries) nethttp.Handler {
+func NewHandler(ctx context.Context, dbClient *db.Queries) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -33,12 +30,12 @@ func NewHandler(ctx context.Context, dbClient *db.Queries) nethttp.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(10 * time.Second))
 
-	r.Get("/itineraries", func(w nethttp.ResponseWriter, r *nethttp.Request) {
+	r.Get("/itineraries", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		itineraries, err := dbClient.GetItineraries(ctx)
 		if err != nil {
-			nethttp.Error(w, "failed to load itineraries", nethttp.StatusInternalServerError)
+			http.Error(w, "failed to load itineraries", http.StatusInternalServerError)
 			return
 		}
 
@@ -47,15 +44,15 @@ func NewHandler(ctx context.Context, dbClient *db.Queries) nethttp.Handler {
 		}
 	})
 
-	r.Put("/itinerary", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-		r.Body = nethttp.MaxBytesReader(w, r.Body, 1<<20)
+	r.Put("/itinerary", func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 
 		var req db.Itinerary
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
 
 		if err := dec.Decode(&req); err != nil {
-			nethttp.Error(w, "invalid itinerary", nethttp.StatusBadRequest)
+			http.Error(w, "invalid itinerary", http.StatusBadRequest)
 			return
 		}
 
@@ -63,7 +60,7 @@ func NewHandler(ctx context.Context, dbClient *db.Queries) nethttp.Handler {
 		// TODO: validate new itinerary
 
 		if _, err := dbClient.UpdateItinerary(ctx, db.ToUpdateParams(req)); err != nil {
-			nethttp.Error(w, "failed to update itinerary", nethttp.StatusInternalServerError)
+			http.Error(w, "failed to update itinerary", http.StatusInternalServerError)
 		}
 	})
 
@@ -90,7 +87,7 @@ func Handle(ctx context.Context, args Args) error {
 	pool := db.Connect(ctx)
 	defer pool.Close()
 
-	srv := &nethttp.Server{
+	srv := &http.Server{
 		Addr:         args.Addr,
 		Handler:      NewHandler(ctx, db.New(pool)),
 		ReadTimeout:  args.ReadTimeout,
@@ -104,17 +101,13 @@ func Handle(ctx context.Context, args Args) error {
 		errCh <- srv.ListenAndServe()
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(stop)
-
 	select {
 	case err := <-errCh:
-		if err != nil && err != nethttp.ErrServerClosed {
+		if err != nil && err != http.ErrServerClosed {
 			return err
 		}
 		return nil
-	case <-stop:
+	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {

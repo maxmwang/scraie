@@ -11,20 +11,20 @@ import (
 const ContextKey = "scraie:config"
 
 type Config struct {
-	SerpAPIKey      string
-	DBURI           string
-	DiscordWebhook  string
-	DiscordBotToken string
-	LogJSON         bool
+	SerpAPIKey       string
+	DBURI            string
+	DiscordBotToken  string
+	DiscordChannelID string
+	LogJSON          bool
 }
 
 func Load() Config {
 	cfg := Config{
-		SerpAPIKey:      os.Getenv("FLIGHTS_SERPAPI_KEY"),
-		DBURI:           os.Getenv("FLIGHTS_DB_URI"),
-		DiscordWebhook:  os.Getenv("SCRAIE_DISCORD_WEBHOOK"),
-		DiscordBotToken: os.Getenv("DISCORD_BOT_TOKEN"),
-		LogJSON:         false,
+		SerpAPIKey:       os.Getenv("FLIGHTS_SERPAPI_KEY"),
+		DBURI:            os.Getenv("FLIGHTS_DB_URI"),
+		DiscordBotToken:  os.Getenv("DISCORD_BOT_TOKEN"),
+		DiscordChannelID: os.Getenv("DISCORD_CHANNEL_ID"),
+		LogJSON:          false,
 	}
 	if b, err := strconv.ParseBool(os.Getenv("LOG_JSON")); err == nil && b == true {
 		cfg.LogJSON = true
@@ -35,20 +35,6 @@ func Load() Config {
 	return cfg
 }
 
-func LoadBot() Config {
-	cfg := Config{
-		DBURI:           os.Getenv("FLIGHTS_DB_URI"),
-		DiscordBotToken: os.Getenv("DISCORD_BOT_TOKEN"),
-	}
-	if cfg.DBURI == "" {
-		log.Fatal().Msg("FLIGHTS_DB_URI key not defined")
-	}
-	if cfg.DiscordBotToken == "" {
-		log.Fatal().Msg("DISCORD_BOT_TOKEN key not defined")
-	}
-	return cfg
-}
-
 func validate(cfg *Config) {
 	if cfg.SerpAPIKey == "" {
 		log.Fatal().Msg("FLIGHTS_SERPAPI_KEY key not defined")
@@ -56,8 +42,11 @@ func validate(cfg *Config) {
 	if cfg.DBURI == "" {
 		log.Fatal().Msg("FLIGHTS_DB_URI key not defined")
 	}
-	if cfg.DiscordWebhook == "" {
-		log.Fatal().Msg("SCRAIE_DISCORD_WEBHOOK key not defined")
+	if cfg.DiscordBotToken == "" {
+		log.Fatal().Msg("DISCORD_BOT_TOKEN key not defined")
+	}
+	if cfg.DiscordChannelID == "" {
+		log.Fatal().Msg("DISCORD_CHANNEL_ID key not defined")
 	}
 }
 

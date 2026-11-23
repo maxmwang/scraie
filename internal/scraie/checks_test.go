@@ -110,7 +110,7 @@ func TestCheckNear7DayMinimum(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := checkNear7DayMinimum(tt.options); got.pass != tt.want {
+			if got := checkNear7DayMinimum(tt.options); got.IsSome() != tt.want {
 				t.Errorf("checkNear7DayMinimum() = %v, want %v", got, tt.want)
 			}
 		})
@@ -187,7 +187,7 @@ func TestCheckPriceMovement(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := checkPriceMovement(tt.options); got.pass != tt.want {
+			if got := checkPriceMovement(tt.options); got.IsSome() != tt.want {
 				t.Errorf("checkPriceMovement() = %v, want %v", got, tt.want)
 			}
 		})

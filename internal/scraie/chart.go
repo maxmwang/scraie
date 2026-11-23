@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/maxmwang/scraie/flights/internal/db"
@@ -51,9 +52,9 @@ func timestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 
 // buildDailyMinimumPriceChartURL renders the recent daily-minimum price history
 // as a QuickChart (https://quickchart.io) line chart and returns its image URL,
-// suitable for use as a Discord embed image. It returns "" (without error) when
+// suitable for use as an image. It returns "" (without error) when
 // there is no data to plot.
-func buildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysToChart int) (string, error) {
+func BuildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysToChart int) (string, error) {
 	xs, ys := timestampMinimumPriceSeries(history)
 	if len(xs) == 0 {
 		return "", nil
@@ -103,4 +104,19 @@ func buildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 		return "", fmt.Errorf("buildDailyMinimumPriceChartURL: %w", err)
 	}
 	return "https://quickchart.io/chart?w=900&h=400&bkg=white&c=" + url.QueryEscape(string(c)), nil
+}
+
+func currencySymbol(code string) string {
+	switch strings.ToUpper(code) {
+	case "", "USD":
+		return "$"
+	case "EUR":
+		return "€"
+	case "GBP":
+		return "£"
+	case "JPY":
+		return "¥"
+	default:
+		return code
+	}
 }

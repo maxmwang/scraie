@@ -9,28 +9,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 
-	"github.com/maxmwang/scraie/flights/internal/config"
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search/goflights"
 	"github.com/maxmwang/scraie/flights/internal/util"
 )
 
-type Args struct {
-	NoSearch bool
-	Readonly bool
+type Notifier interface {
+	Notify(context.Context, Notification) error
 }
 
-func Handle(ctx context.Context, args Args) {
-	log.Info().Bool("nosearch", args.NoSearch).Bool("readonly", args.Readonly).Msg("starting run")
+type JobArgs struct {
+	NoSearch bool
+	Readonly bool
+	Notifier Notifier
+}
 
-	cfg := config.Load()
-	ctx = context.WithValue(ctx, config.ContextKey, cfg)
+func Handle(ctx context.Context, args JobArgs) {
+	log.Info().
+		Bool("nosearch", args.NoSearch).
+		Bool("readonly", args.Readonly).
+		Str("notifier", "TODO").
+		Msg("starting run")
 
-	pool := db.Connect(ctx)
-	defer pool.Close()
-	dbClient := db.New(pool)
-
-	itineraries, err := dbClient.GetItineraries(ctx)
+	pool := db.FromContext(ctx)
+	itineraries, err := db.New(pool).GetItineraries(ctx)
 	if err != nil {
 		log.Fatal().Err(err).Msg("error loading itineraries")
 		return
@@ -47,40 +49,53 @@ func Handle(ctx context.Context, args Args) {
 			if !args.NoSearch {
 				result, err := searcher.Search(it)
 				if err != nil {
-					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary search error")
+					log.Error().
+						Err(err).
+						Int64("itinerary_id", it.ID).
+						Msg("itinerary search error")
 					return
 				}
 
-				log.Info().Int64("itinerary_id", it.ID).Str("desc", util.ItineraryToString(it)).
+				log.Info().
+					Int64("itinerary_id", it.ID).
+					Str("desc", util.ItineraryToString(it)).
 					Msg(fmt.Sprintf("found %d option(s)", len(result.Options)))
 
 				searchedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 
 				if !args.Readonly {
-					for j, or := range result.Options {
+					for i, option := range result.Options {
+						logError := func(err error, msg string) {
+							log.Error().
+								Err(err).
+								Int64("itinerary_id", it.ID).
+								Int("option_i", i).
+								Msg(msg)
+						}
+
 						tx, err := pool.Begin(ctx)
 						if err != nil {
-							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction begin error")
+							logError(err, "itinerary option transaction begin error")
 							continue
 						}
-						qtx := dbClient.WithTx(tx)
+						qtx := db.New(pool).WithTx(tx)
 
 						optionID, err := qtx.CreateOption(ctx, db.CreateOptionParams{
-							ItineraryID:   or.Option.ItineraryID,
-							TotalDuration: or.Option.TotalDuration,
-							Price:         or.Option.Price,
-							Type:          or.Option.Type,
+							ItineraryID:   option.Option.ItineraryID,
+							TotalDuration: option.Option.TotalDuration,
+							Price:         option.Option.Price,
+							Type:          option.Option.Type,
 							SearchedAt:    searchedAt,
 						})
 						if err != nil {
-							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option save error")
+							logError(err, "itinerary option save error")
 							tx.Rollback(ctx)
 							continue
 						}
 
-						segmentParams := make([]db.BulkInsertSegmentsParams, len(or.Segments))
-						for k, s := range or.Segments {
-							segmentParams[k] = db.BulkInsertSegmentsParams{
+						segmentParams := make([]db.BulkInsertSegmentsParams, 0, len(option.Segments))
+						for _, s := range option.Segments {
+							segmentParams = append(segmentParams, db.BulkInsertSegmentsParams{
 								OptionID:             optionID,
 								DepartureAirportName: s.DepartureAirportName,
 								DepartureAirportID:   s.DepartureAirportID,
@@ -95,16 +110,17 @@ func Handle(ctx context.Context, args Args) {
 								TravelClass:          s.TravelClass,
 								FlightNumber:         s.FlightNumber,
 								Overnight:            s.Overnight,
-							}
+							})
 						}
-						if _, err := qtx.BulkInsertSegments(ctx, segmentParams); err != nil {
-							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option segments save error")
+						_, err = qtx.BulkInsertSegments(ctx, segmentParams)
+						if err != nil {
+							logError(err, "itinerary option segments save error")
 							tx.Rollback(ctx)
 							continue
 						}
 
-						layoverParams := make([]db.BulkInsertLayoversParams, len(or.Layovers))
-						for k, l := range or.Layovers {
+						layoverParams := make([]db.BulkInsertLayoversParams, len(option.Layovers))
+						for k, l := range option.Layovers {
 							layoverParams[k] = db.BulkInsertLayoversParams{
 								OptionID:  optionID,
 								Duration:  l.Duration,
@@ -114,26 +130,41 @@ func Handle(ctx context.Context, args Args) {
 							}
 						}
 						if _, err := qtx.BulkInsertLayovers(ctx, layoverParams); err != nil {
-							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option layovers save error")
+							logError(err, "itinerary option layovers save error")
 							tx.Rollback(ctx)
 							continue
 						}
 
 						if err := tx.Commit(ctx); err != nil {
-							log.Error().Err(err).Int64("itinerary_id", it.ID).Int("option_i", j).Msg("itinerary option transaction commit error")
+							logError(err, "itinerary option transaction commit error")
 							continue
 						}
 					}
 
-					log.Info().Int64("itinerary_id", it.ID).Str("desc", util.ItineraryToString(it)).
+					log.Info().
+						Int64("itinerary_id", it.ID).
+						Str("desc", util.ItineraryToString(it)).
 						Msg(fmt.Sprintf("saved %d option(s)", len(result.Options)))
 				}
 			}
 
 			if it.Notify {
-				err = NotifyOnPriceChange(ctx, dbClient, it)
+				notification, err := buildNotification(ctx, it)
 				if err != nil {
-					log.Error().Err(err).Int64("itinerary_id", it.ID).Msg("itinerary discord notify")
+					log.Error().
+						Err(err).
+						Int64("itinerary_id", it.ID).
+						Msg("failed to build notification")
+				}
+
+				if notification, ok := notification.Value(); ok {
+					err = args.Notifier.Notify(ctx, notification)
+					if err != nil {
+						log.Error().
+							Err(err).
+							Int64("itinerary_id", it.ID).
+							Msg("itinerary discord notify")
+					}
 				}
 			}
 		})

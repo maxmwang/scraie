@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/maxmwang/scraie/flights/internal/db"
+	"github.com/maxmwang/scraie/flights/internal/util/option"
 )
 
 // priceFloat reads an Options.price NUMERIC as a float64, which is what every
@@ -23,24 +24,19 @@ func priceFloat(p pgtype.Numeric) float64 {
 }
 
 type checkResults struct {
-	near7DayMinimum near7DayMinimumResult
-	priceMovement   priceMovementResult
+	Near7DayMinimum option.Option[float64]
+	PriceMovement   option.Option[float64]
 }
 
 func makeChecks(dailyCheapestOptions []db.Option) checkResults {
 	return checkResults{
-		near7DayMinimum: checkNear7DayMinimum(dailyCheapestOptions),
-		priceMovement:   checkPriceMovement(dailyCheapestOptions),
+		Near7DayMinimum: checkNear7DayMinimum(dailyCheapestOptions),
+		PriceMovement:   checkPriceMovement(dailyCheapestOptions),
 	}
 }
 
 func (c checkResults) any() bool {
-	return c.near7DayMinimum.pass || c.priceMovement.pass
-}
-
-type near7DayMinimumResult struct {
-	pass            bool
-	prev7DayMinimum float64
+	return c.Near7DayMinimum.IsSome() || c.PriceMovement.IsSome()
 }
 
 // near7DayMinimumThreshold is the precentage the newly scraped minimum
@@ -53,9 +49,9 @@ const near7DayMinimumThreshold = 0.01
 // 7 day minimum, or within 1% above it.
 //
 // Expects options to be sorted by time and includes only cheapest options.
-func checkNear7DayMinimum(options []db.Option) near7DayMinimumResult {
+func checkNear7DayMinimum(options []db.Option) option.Option[float64] {
 	if len(options) < 2 {
-		return near7DayMinimumResult{}
+		return option.None[float64]()
 	}
 
 	// includes latest scrape when calculating 7 day minimum
@@ -71,16 +67,7 @@ func checkNear7DayMinimum(options []db.Option) near7DayMinimumResult {
 
 	newPrice := priceFloat(options[len(options)-1].Price)
 
-	if math.Abs(prev7DayMinimum-newPrice)/prev7DayMinimum <= near7DayMinimumThreshold {
-		return near7DayMinimumResult{pass: true, prev7DayMinimum: prev7DayMinimum}
-	} else {
-		return near7DayMinimumResult{}
-	}
-}
-
-type priceMovementResult struct {
-	pass bool
-	prev float64
+	return option.SomeIf(math.Abs(prev7DayMinimum-newPrice)/prev7DayMinimum <= near7DayMinimumThreshold, prev7DayMinimum)
 }
 
 // priceMovementThreshold is the minimum percent change from the previous
@@ -92,17 +79,13 @@ const priceMovementThreshold = 0.05
 // previous scrape (len(options) - 2), then returns true if the newly scraped
 // minimum moved at least 5% in either direction. Returns false if the input
 // slice contains less than 2 entries.
-func checkPriceMovement(options []db.Option) priceMovementResult {
+func checkPriceMovement(options []db.Option) option.Option[float64] {
 	if len(options) < 2 {
-		return priceMovementResult{}
+		return option.None[float64]()
 	}
 
 	prevMin := priceFloat(options[len(options)-2].Price)
 	newMin := priceFloat(options[len(options)-1].Price)
 
-	if math.Abs(prevMin-newMin)/prevMin >= priceMovementThreshold {
-		return priceMovementResult{pass: true, prev: prevMin}
-	} else {
-		return priceMovementResult{prev: prevMin}
-	}
+	return option.SomeIf(math.Abs(prevMin-newMin)/prevMin >= priceMovementThreshold, prevMin)
 }
