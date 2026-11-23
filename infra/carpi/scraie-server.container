@@ -6,7 +6,12 @@
 #   install -Dm 644 scraie-server.container ~/.config/containers/systemd/scraie-server.container
 #   systemctl --user daemon-reload
 #   /usr/libexec/podman/quadlet -dryrun -user
-#   systemctl --user enable --now scraie-server.service
+#   systemctl --user start scraie-server.service
+#   systemctl --user status scraie-server.service
+#
+# Quadlet services are generated in /run and cannot be enabled directly.
+# Enable the user manager to linger for boot persistence:
+#   sudo loginctl enable-linger "$USER"
 [Unit]
 Description=Scraie server
 After=network-online.target
