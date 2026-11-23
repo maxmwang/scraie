@@ -11,7 +11,6 @@ To run locally:
 FLIGHTS_SERPAPI_KEY=_ \
 FLIGHTS_DB_URI=_ \
 DISCORD_BOT_TOKEN=_ \
-DISCORD_CHANNEL_ID=_ \
 go run ./cmd/scraie -nosearch -readonly
 ```
 

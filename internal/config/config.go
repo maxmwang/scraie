@@ -11,20 +11,18 @@ import (
 const ContextKey = "scraie:config"
 
 type Config struct {
-	SerpAPIKey       string
-	DBURI            string
-	DiscordBotToken  string
-	DiscordChannelID string
-	LogJSON          bool
+	SerpAPIKey      string
+	DBURI           string
+	DiscordBotToken string
+	LogJSON         bool
 }
 
 func Load() Config {
 	cfg := Config{
-		SerpAPIKey:       os.Getenv("FLIGHTS_SERPAPI_KEY"),
-		DBURI:            os.Getenv("FLIGHTS_DB_URI"),
-		DiscordBotToken:  os.Getenv("DISCORD_BOT_TOKEN"),
-		DiscordChannelID: os.Getenv("DISCORD_CHANNEL_ID"),
-		LogJSON:          false,
+		SerpAPIKey:      os.Getenv("FLIGHTS_SERPAPI_KEY"),
+		DBURI:           os.Getenv("FLIGHTS_DB_URI"),
+		DiscordBotToken: os.Getenv("DISCORD_BOT_TOKEN"),
+		LogJSON:         false,
 	}
 	if b, err := strconv.ParseBool(os.Getenv("LOG_JSON")); err == nil && b == true {
 		cfg.LogJSON = true
@@ -44,9 +42,6 @@ func validate(cfg *Config) {
 	}
 	if cfg.DiscordBotToken == "" {
 		log.Fatal().Msg("DISCORD_BOT_TOKEN key not defined")
-	}
-	if cfg.DiscordChannelID == "" {
-		log.Fatal().Msg("DISCORD_CHANNEL_ID key not defined")
 	}
 }
 
