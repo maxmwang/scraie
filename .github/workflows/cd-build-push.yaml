@@ -9,9 +9,18 @@ on:
 
 jobs:
   build-push-image:
-    name: Build and Push Image
+    name: Build and Push ${{ matrix.name }}
     runs-on: ubuntu-latest
     environment: prod
+    strategy:
+      matrix:
+        include:
+          - name: Scraie
+            target: scraie
+            image: maxmwang/scraie
+          - name: Server
+            target: server
+            image: maxmwang/scraie-server
 
     steps:
       - name: Checkout Repository
@@ -30,6 +39,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           file: Containerfile
-          tags: maxmwang/scraie:latest
+          target: ${{ matrix.target }}
+          tags: ${{ matrix.image }}:latest
           platforms: linux/amd64,linux/arm64
           push: true

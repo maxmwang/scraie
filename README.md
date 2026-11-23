@@ -16,4 +16,6 @@ go run ./cmd/scraie -nosearch -readonly
 
 ## Deployment
 
-Github Actions automatically build and push the latest commit into a container and onto Docker Hub. `carpi.container` is configured with `Container.Pull=always`, so the latest commit should always be pulled.
+GitHub Actions automatically builds and pushes the latest commit to Docker Hub as two containers:
+`maxmwang/scraie:latest` for scheduled jobs and `maxmwang/scraie-server:latest` for the long-lived server.
+The Carpi Quadlets use `Container.Pull=always`, so the latest commits are pulled on restart or deployment.

@@ -1,0 +1,32 @@
+# Long-lived HTTP, Discord, and server deployment. Podman Quadlet generates
+# scraie-server.service and restarts it if the process exits.
+# Rootless install: ~/.config/containers/systemd/scraie-server.container
+# Secrets: ~/.config/scraie/scraie.env (mode 0600).
+#
+#   install -Dm 644 scraie-server.container ~/.config/containers/systemd/scraie-server.container
+#   systemctl --user daemon-reload
+#   /usr/libexec/podman/quadlet -dryrun -user
+#   systemctl --user enable --now scraie-server.service
+[Unit]
+Description=Scraie server
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=scraie-server
+Image=docker.io/maxmwang/scraie-server:latest
+Pull=always
+Entrypoint=/usr/local/bin/scraie-server
+Exec=-http -read-only -no-search
+PublishPort=8080:8080
+EnvironmentFile=/home/max/.config/scraie/scraie.env
+Environment=LOG_JSON=true
+LogDriver=passthrough
+
+[Service]
+Restart=always
+TimeoutStartSec=900
+ExecStartPre=/bin/sh -c 'until getent hosts www.google.com >/dev/null 2>&1; do sleep 5; done'
+
+[Install]
+WantedBy=default.target
