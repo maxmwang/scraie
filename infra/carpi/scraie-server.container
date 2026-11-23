@@ -22,7 +22,7 @@ ContainerName=scraie-server
 Image=docker.io/maxmwang/scraie-server:latest
 Pull=always
 Entrypoint=/usr/local/bin/scraie-server
-Exec=-http -read-only -no-search
+Exec=-timezone=America/Los_Angeles
 PublishPort=8080:8080
 EnvironmentFile=/home/max/.config/scraie/scraie.env
 Environment=LOG_JSON=true

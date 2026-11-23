@@ -27,13 +27,6 @@ func SomeIf[T any](p bool, v T) Option[T] {
 	return None[T]()
 }
 
-func SomeIfPtr[T any](p bool, v *T) Option[T] {
-	if p {
-		return Some(*v)
-	}
-	return None[T]()
-}
-
 func (o Option[T]) IsSome() bool {
 	return o.isSome
 }

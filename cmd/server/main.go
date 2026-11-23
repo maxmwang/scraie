@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	_ "time/tzdata"
 
 	"golang.org/x/sync/errgroup"
 
@@ -62,7 +63,7 @@ func main() {
 		return scraie.Run(
 			ctx,
 			scraie.ServerArgs{
-				LocationName:   option.SomeIfPtr(timezone != nil, timezone),
+				LocationName:   option.SomeIf(*timezone != "", *timezone),
 				RunHours:       runHours,
 				RunImmediately: *runImmediately,
 			}, scraie.JobArgs{
