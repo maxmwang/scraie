@@ -40,17 +40,31 @@ func New(ctx context.Context) (*Bot, error) {
 	commandHandler := &commands.Handler{
 		DB:         b.db,
 		EnsureUser: b.getOrCreateUser,
+		RenderDetailedSummary: func(it db.Itinerary) string {
+			return renderItinerarySummary(it, itinerarySummaryOptions{
+				includeID:       true,
+				includeDefaults: true,
+				formatDate:      formatItineraryDate,
+			})
+		},
 	}
 	s.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if i.Type == discordgo.InteractionMessageComponent {
+			customID := i.MessageComponentData().CustomID
+			if len(customID) >= 5 && customID[:5] == "list:" {
+				commands.HandleListComponent(ctx, commandHandler, s, i)
+			}
+			return
+		}
 		switch i.ApplicationCommandData().Name {
 		case "create":
-			commands.HandleCreate(commandHandler, s, i)
+			commands.HandleCreate(ctx, commandHandler, s, i)
 		case "list":
-			commands.HandleList(commandHandler, s, i)
+			commands.HandleList(ctx, commandHandler, s, i)
 		case "get":
-			commands.HandleGet(commandHandler, s, i)
+			commands.HandleGet(ctx, commandHandler, s, i)
 		case "update":
-			commands.HandleUpdate(commandHandler, s, i)
+			commands.HandleUpdate(ctx, commandHandler, s, i)
 		}
 	})
 

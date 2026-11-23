@@ -1,4 +1,4 @@
-package scraie
+package util
 
 import (
 	"encoding/json"
@@ -8,27 +8,26 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/maxmwang/scraie/flights/internal/db"
-	"github.com/maxmwang/scraie/flights/internal/util"
 )
 
-// timestampMinimumPriceSeries returns two series, the first mapping onto the
-// second (ie. X and Y-axis values). The Xs are dates in ascending order. The
-// Ys are the minimum observed search.FlightOptions price on each timetsamp.
-// Each X value is anchored to the start of that timetsamp in the observation's
-// own location.
-func timestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
+// TimestampMinimumPriceSeries returns two series, the first mapping onto the
+// second (X and Y-axis values). X values are observation timestamps in
+// ascending order; Y values are the minimum price at each timestamp.
+func TimestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 	minByTimestamp := make(map[time.Time]float64)
-	for _, o := range history {
-		if !o.SearchedAt.Valid {
+	for _, option := range history {
+		if !option.SearchedAt.Valid {
 			continue
 		}
-		t := o.SearchedAt.Time
+		t := option.SearchedAt.Time
 		y, m, d := t.Date()
 		h, _, _ := t.Clock()
 		timestamp := time.Date(y, m, d, h, 0, 0, 0, t.Location())
-		price := priceFloat(o.Price)
-		if cur, ok := minByTimestamp[timestamp]; !ok || price < cur {
+		price := numericFloat64(option.Price)
+		if current, ok := minByTimestamp[timestamp]; !ok || price < current {
 			minByTimestamp[timestamp] = price
 		}
 	}
@@ -37,7 +36,9 @@ func timestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 	for timestamp := range minByTimestamp {
 		timestamps = append(timestamps, timestamp)
 	}
-	sort.Slice(timestamps, func(a, b int) bool { return timestamps[a].Before(timestamps[b]) })
+	sort.Slice(timestamps, func(a, b int) bool {
+		return timestamps[a].Before(timestamps[b])
+	})
 
 	xs := make([]time.Time, len(timestamps))
 	ys := make([]float64, len(timestamps))
@@ -48,14 +49,10 @@ func timestampMinimumPriceSeries(history []db.Option) ([]time.Time, []float64) {
 	return xs, ys
 }
 
-// TODO: download image instead of using link because link will exceed character limit
-
-// buildDailyMinimumPriceChartURL renders the recent daily-minimum price history
-// as a QuickChart (https://quickchart.io) line chart and returns its image URL,
-// suitable for use as an image. It returns "" (without error) when
-// there is no data to plot.
+// BuildDailyMinimumPriceChartURL renders recent daily-minimum price history
+// as a QuickChart line chart and returns a URL suitable for an embed image.
 func BuildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysToChart int) (string, error) {
-	xs, ys := timestampMinimumPriceSeries(history)
+	xs, ys := TimestampMinimumPriceSeries(history)
 	if len(xs) == 0 {
 		return "", nil
 	}
@@ -65,8 +62,8 @@ func BuildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 	}
 
 	labels := make([]string, len(xs))
-	for i, t := range xs {
-		labels[i] = t.Format(time.Stamp)
+	for i, timestamp := range xs {
+		labels[i] = timestamp.Format(time.Stamp)
 	}
 
 	config := map[string]any{
@@ -74,7 +71,7 @@ func BuildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 		"data": map[string]any{
 			"labels": labels,
 			"datasets": []map[string]any{{
-				"label":                "Daily min (" + currencySymbol(it.Currency) + ")",
+				"label":                "Daily min (" + CurrencySymbol(it.Currency) + ")",
 				"data":                 ys,
 				"fill":                 false,
 				"borderColor":          "#3498DB",
@@ -88,7 +85,7 @@ func BuildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 			"legend": map[string]any{"display": false},
 			"title": map[string]any{
 				"display": true,
-				"text":    util.ItineraryToString(it),
+				"text":    ItineraryToString(it),
 			},
 			"scales": map[string]any{
 				"yAxes": []map[string]any{{
@@ -99,14 +96,14 @@ func BuildDailyMinimumPriceChartURL(it db.Itinerary, history []db.Option, nDaysT
 		},
 	}
 
-	c, err := json.Marshal(config)
+	encoded, err := json.Marshal(config)
 	if err != nil {
-		return "", fmt.Errorf("buildDailyMinimumPriceChartURL: %w", err)
+		return "", fmt.Errorf("build daily minimum price chart URL: %w", err)
 	}
-	return "https://quickchart.io/chart?w=900&h=400&bkg=white&c=" + url.QueryEscape(string(c)), nil
+	return "https://quickchart.io/chart?w=900&h=400&bkg=white&c=" + url.QueryEscape(string(encoded)), nil
 }
 
-func currencySymbol(code string) string {
+func CurrencySymbol(code string) string {
 	switch strings.ToUpper(code) {
 	case "", "USD":
 		return "$"
@@ -119,4 +116,12 @@ func currencySymbol(code string) string {
 	default:
 		return code
 	}
+}
+
+func numericFloat64(value pgtype.Numeric) float64 {
+	result, err := value.Float64Value()
+	if err != nil || !result.Valid {
+		return 0
+	}
+	return result.Float64
 }

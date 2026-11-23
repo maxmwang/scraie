@@ -7,6 +7,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,8 +16,9 @@ import (
 )
 
 type Handler struct {
-	DB         *db.Queries
-	EnsureUser func(context.Context, *discordgo.InteractionCreate) (pgtype.UUID, bool)
+	DB                    *db.Queries
+	EnsureUser            func(context.Context, *discordgo.InteractionCreate) (pgtype.UUID, bool)
+	RenderDetailedSummary func(db.Itinerary) string
 }
 
 type ItineraryInput struct {
@@ -89,20 +91,36 @@ func int32Ptr(t pgtype.Int4) *int32 {
 
 func fromItinerary(it db.Itinerary) ItineraryInput {
 	in := ItineraryInput{
-		DepartureID: it.DepartureID, ArrivalID: it.ArrivalID, Type: it.Type,
-		OutboundDate: it.OutboundDate, ReturnDate: textPtr(it.ReturnDate),
-		TravelClass: it.TravelClass, ShowHidden: it.ShowHidden,
-		ExcludeBasic: it.ExcludeBasic, DeepSearch: it.DeepSearch,
-		Adults: it.Adults, Children: it.Children,
-		InfantsInSeat: it.InfantsInSeat, InfantsOnLap: it.InfantsOnLap,
-		SortBy: it.SortBy, Stops: it.Stops,
-		ExcludeAirlines: textPtr(it.ExcludeAirlines), IncludeAirlines: textPtr(it.IncludeAirlines),
-		Bags: it.Bags, MaxPrice: int32Ptr(it.MaxPrice),
-		OutboundTimes: textPtr(it.OutboundTimes), ReturnTimes: textPtr(it.ReturnTimes),
-		Emissions: int32Ptr(it.Emissions), LayoverDuration: textPtr(it.LayoverDuration),
-		ExcludeConns: textPtr(it.ExcludeConns), MaxDuration: int32Ptr(it.MaxDuration),
-		Gl: it.Gl, Hl: it.Hl, Currency: it.Currency,
-		Notify: it.Notify, Description: textPtr(it.Description),
+		DepartureID:     it.DepartureID,
+		ArrivalID:       it.ArrivalID,
+		Type:            it.Type,
+		OutboundDate:    it.OutboundDate,
+		ReturnDate:      textPtr(it.ReturnDate),
+		TravelClass:     it.TravelClass,
+		ShowHidden:      it.ShowHidden,
+		ExcludeBasic:    it.ExcludeBasic,
+		DeepSearch:      it.DeepSearch,
+		Adults:          it.Adults,
+		Children:        it.Children,
+		InfantsInSeat:   it.InfantsInSeat,
+		InfantsOnLap:    it.InfantsOnLap,
+		SortBy:          it.SortBy,
+		Stops:           it.Stops,
+		ExcludeAirlines: textPtr(it.ExcludeAirlines),
+		IncludeAirlines: textPtr(it.IncludeAirlines),
+		Bags:            it.Bags,
+		MaxPrice:        int32Ptr(it.MaxPrice),
+		OutboundTimes:   textPtr(it.OutboundTimes),
+		ReturnTimes:     textPtr(it.ReturnTimes),
+		Emissions:       int32Ptr(it.Emissions),
+		LayoverDuration: textPtr(it.LayoverDuration),
+		ExcludeConns:    textPtr(it.ExcludeConns),
+		MaxDuration:     int32Ptr(it.MaxDuration),
+		Gl:              it.Gl,
+		Hl:              it.Hl,
+		Currency:        it.Currency,
+		Notify:          it.Notify,
+		Description:     textPtr(it.Description),
 	}
 	if it.MultiCityJson.Valid && json.Valid([]byte(it.MultiCityJson.String)) {
 		in.MultiCity = json.RawMessage(it.MultiCityJson.String)
@@ -201,41 +219,70 @@ func optInt(opts []*discordgo.ApplicationCommandInteractionDataOption, name stri
 	return 0
 }
 
-func respond(s *discordgo.Session, i *discordgo.InteractionCreate, msg string, ephemeral bool) {
+const (
+	successColor = 0x57F287
+	errorColor   = 0xED4245
+)
+
+func formatDate(raw string) string {
+	date, err := time.Parse(time.DateOnly, raw)
+	if err != nil {
+		return raw
+	}
+	return date.Format("Jan 2, 2006")
+}
+
+func fmtID(id int64) string {
+	return strconv.FormatInt(id, 10)
+}
+
+func summary(it db.Itinerary) string {
+	value := it.DepartureID + " → " + it.ArrivalID + ", " + formatDate(it.OutboundDate)
+	if it.ReturnDate.Valid {
+		value += " - " + formatDate(it.ReturnDate.String)
+	}
+	if it.Description.Valid && it.Description.String != "" {
+		value += " — " + it.Description.String
+	}
+	return value
+}
+
+func respondError(s *discordgo.Session, i *discordgo.InteractionCreate, description string, ephemeral bool) {
 	var flags discordgo.MessageFlags
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral
 	}
 	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{Content: msg, Flags: flags},
-	}); err != nil {
-		log.Printf("respond error: %v", err)
-	}
-}
-
-func respondEmbed(s *discordgo.Session, i *discordgo.InteractionCreate, title, description string) {
-	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{{Title: title, Description: description}},
+			Embeds: []*discordgo.MessageEmbed{{
+				Title:       "Error",
+				Description: description,
+				Color:       errorColor,
+			}},
+			Flags: flags,
 		},
 	}); err != nil {
 		log.Printf("respond error: %v", err)
 	}
 }
 
-func summary(it db.Itinerary) string {
-	s := it.DepartureID + " → " + it.ArrivalID + ", " + it.OutboundDate
-	if it.ReturnDate.Valid {
-		s += "–" + it.ReturnDate.String
+func respondSuccess(s *discordgo.Session, i *discordgo.InteractionCreate, title, description string, ephemeral bool) {
+	var flags discordgo.MessageFlags
+	if ephemeral {
+		flags = discordgo.MessageFlagsEphemeral
 	}
-	if it.Description.Valid && it.Description.String != "" {
-		s += " — " + it.Description.String
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{{
+				Title:       title,
+				Description: description,
+				Color:       successColor,
+			}},
+			Flags: flags,
+		},
+	}); err != nil {
+		log.Printf("respond error: %v", err)
 	}
-	return s
-}
-
-func fmtID(id int64) string {
-	return strconv.FormatInt(id, 10)
 }

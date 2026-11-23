@@ -24,32 +24,32 @@ var Update = &discordgo.ApplicationCommand{
 	},
 }
 
-func HandleUpdate(h *Handler, s *discordgo.Session, i *discordgo.InteractionCreate) {
-	userID, ok := h.EnsureUser(context.Background(), i)
+func HandleUpdate(ctx context.Context, h *Handler, s *discordgo.Session, i *discordgo.InteractionCreate) {
+	userID, ok := h.EnsureUser(ctx, i)
 	if !ok {
-		respond(s, i, "❌ Couldn't identify your Discord account.", true)
+		respondError(s, i, "Couldn't identify your Discord account.", true)
 		return
 	}
 	opts := i.ApplicationCommandData().Options
 	id := optInt(opts, "id")
-	existing, err := ownedItinerary(context.Background(), h, id, userID)
+	existing, err := ownedItinerary(ctx, h, id, userID)
 	if err != nil {
-		respond(s, i, "❌ No itinerary `#"+fmtID(id)+"`.", true)
+		respondError(s, i, "No itinerary `#"+fmtID(id)+"`.", true)
 		return
 	}
 	in := fromItinerary(existing)
 	if err := decodeInto(optString(opts, "json"), &in); err != nil {
-		respond(s, i, "❌ Invalid JSON: `"+err.Error()+"`", true)
+		respondError(s, i, "Invalid JSON: `"+err.Error()+"`", true)
 		return
 	}
 	it := toItinerary(in, existing)
 	if err := validateRanges(&it); err != nil {
-		respond(s, i, "❌ "+err.Error(), true)
+		respondError(s, i, err.Error(), true)
 		return
 	}
-	if _, err := h.DB.UpdateItinerary(context.Background(), db.ToUpdateParams(it)); err != nil {
-		respond(s, i, "❌ Couldn't save changes.", true)
+	if _, err := h.DB.UpdateItinerary(ctx, db.ToUpdateParams(it)); err != nil {
+		respondError(s, i, "Couldn't save changes.", true)
 		return
 	}
-	respond(s, i, "✅ Updated `#"+fmtID(it.ID)+"`: "+summary(it), false)
+	respondSuccess(s, i, "Itinerary updated", "`#"+fmtID(it.ID)+"`: "+summary(it), false)
 }

@@ -55,14 +55,14 @@ func decodeAndConvert(raw string) db.Itinerary {
 		return db.Itinerary{}
 	}
 
-	var req Request
+	var req InternalRequest
 	if err := proto.Unmarshal(encoded, &req); err != nil {
 		return db.Itinerary{}
 	}
 	return requestToItinerary(&req)
 }
 
-func requestToItinerary(req *Request) db.Itinerary {
+func requestToItinerary(req *InternalRequest) db.Itinerary {
 	var it db.Itinerary
 	if req == nil {
 		return it
@@ -90,7 +90,7 @@ func requestToItinerary(req *Request) db.Itinerary {
 				}
 			}
 			it.LayoverDuration = layoverDuration(outbound)
-			if containsEmission(outbound.Emissions, Emissions_EMISSIONS_LESS_ONLY) {
+			if containsEmission(outbound.Emissions, InternalEmissions_INTERNAL_EMISSIONS_LESS_ONLY) {
 				it.Emissions = pgtype.Int4{Int32: 1, Valid: true}
 			}
 		}
@@ -105,11 +105,11 @@ func requestToItinerary(req *Request) db.Itinerary {
 	}
 
 	switch req.TripType {
-	case TripType_TRIP_TYPE_ROUND_TRIP:
+	case InternalTripType_INTERNAL_TRIP_TYPE_ROUND_TRIP:
 		it.Type = int32(req.TripType)
-	case TripType_TRIP_TYPE_ONE_WAY:
+	case InternalTripType_INTERNAL_TRIP_TYPE_ONE_WAY:
 		it.Type = int32(req.TripType)
-	case TripType_TRIP_TYPE_MULTI_CITY:
+	case InternalTripType_INTERNAL_TRIP_TYPE_MULTI_CITY:
 		it.Type = int32(req.TripType)
 	default:
 		switch len(req.Flights) {
@@ -127,13 +127,13 @@ func requestToItinerary(req *Request) db.Itinerary {
 	it.TravelClass = int32(req.Class)
 	for _, passenger := range req.Passengers {
 		switch passenger {
-		case Passenger_PASSENGER_ADULT:
+		case InternalPassenger_INTERNAL_PASSENGER_ADULT:
 			it.Adults++
-		case Passenger_PASSENGER_CHILD:
+		case InternalPassenger_INTERNAL_PASSENGER_CHILD:
 			it.Children++
-		case Passenger_PASSENGER_INFANT_IN_SEAT:
+		case InternalPassenger_INTERNAL_PASSENGER_INFANT_IN_SEAT:
 			it.InfantsInSeat++
-		case Passenger_PASSENGER_INFANT_ON_LAP:
+		case InternalPassenger_INTERNAL_PASSENGER_INFANT_ON_LAP:
 			it.InfantsOnLap++
 		}
 	}
@@ -151,7 +151,7 @@ func requestToItinerary(req *Request) db.Itinerary {
 	return it
 }
 
-func airportCodes(airports []*Airport) string {
+func airportCodes(airports []*InternalAirport) string {
 	codes := make([]string, 0, len(airports))
 	for _, airport := range airports {
 		if airport != nil && strings.TrimSpace(airport.Code) != "" {
@@ -177,7 +177,7 @@ func stopsFromProto(maxStops *int32) int32 {
 	}
 }
 
-func flightTimes(flight *FlightInfo) pgtype.Text {
+func flightTimes(flight *InternalFlightInfo) pgtype.Text {
 	if flight == nil ||
 		flight.EarliestDepartureHour == nil ||
 		flight.LatestDepartureHour == nil {
@@ -193,7 +193,7 @@ func flightTimes(flight *FlightInfo) pgtype.Text {
 	return pgtype.Text{String: value, Valid: true}
 }
 
-func layoverDuration(flight *FlightInfo) pgtype.Text {
+func layoverDuration(flight *InternalFlightInfo) pgtype.Text {
 	if flight == nil ||
 		(flight.MinLayoverMinutes == nil && flight.MaxLayoverMinutes == nil) {
 		return pgtype.Text{}
@@ -211,7 +211,7 @@ func layoverDuration(flight *FlightInfo) pgtype.Text {
 	return pgtype.Text{String: value, Valid: true}
 }
 
-func containsEmission(emissions []Emissions, wanted Emissions) bool {
+func containsEmission(emissions []InternalEmissions, wanted InternalEmissions) bool {
 	for _, emission := range emissions {
 		if emission == wanted {
 			return true
@@ -244,37 +244,37 @@ func ToLink(it db.Itinerary) string {
 	return "https://www.google.com/travel/flights/search?" + query.Encode()
 }
 
-func itineraryToRequest(it db.Itinerary) *Request {
-	req := &Request{
-		Class:    Class(it.TravelClass),
-		TripType: TripType(it.Type),
+func itineraryToRequest(it db.Itinerary) *InternalRequest {
+	req := &InternalRequest{
+		Class:    InternalClass(it.TravelClass),
+		TripType: InternalTripType(it.Type),
 	}
 
 	for i := int32(0); i < it.Adults; i++ {
-		req.Passengers = append(req.Passengers, Passenger_PASSENGER_ADULT)
+		req.Passengers = append(req.Passengers, InternalPassenger_INTERNAL_PASSENGER_ADULT)
 	}
 	for i := int32(0); i < it.Children; i++ {
-		req.Passengers = append(req.Passengers, Passenger_PASSENGER_CHILD)
+		req.Passengers = append(req.Passengers, InternalPassenger_INTERNAL_PASSENGER_CHILD)
 	}
 	for i := int32(0); i < it.InfantsInSeat; i++ {
-		req.Passengers = append(req.Passengers, Passenger_PASSENGER_INFANT_IN_SEAT)
+		req.Passengers = append(req.Passengers, InternalPassenger_INTERNAL_PASSENGER_INFANT_IN_SEAT)
 	}
 	for i := int32(0); i < it.InfantsOnLap; i++ {
-		req.Passengers = append(req.Passengers, Passenger_PASSENGER_INFANT_ON_LAP)
+		req.Passengers = append(req.Passengers, InternalPassenger_INTERNAL_PASSENGER_INFANT_ON_LAP)
 	}
 
 	if it.MaxPrice.Valid {
 		req.MaxPrice = &it.MaxPrice.Int32
 	}
 	if it.Bags > 0 {
-		req.Baggage = &Baggage{CarryOnBag: &it.Bags}
+		req.Baggage = &InternalBaggage{CarryOnBag: &it.Bags}
 	}
 	if it.ExcludeBasic {
 		excludeBasic := true
 		req.ExcludeBasicEconomy = &excludeBasic
 	}
 
-	outbound := &FlightInfo{
+	outbound := &InternalFlightInfo{
 		Date: it.OutboundDate,
 		From: airportsFromCodes(it.DepartureID),
 		To:   airportsFromCodes(it.ArrivalID),
@@ -283,7 +283,7 @@ func itineraryToRequest(it db.Itinerary) *Request {
 	req.Flights = append(req.Flights, outbound)
 
 	if it.Type == 1 {
-		inbound := &FlightInfo{
+		inbound := &InternalFlightInfo{
 			Date: it.ReturnDate.String,
 			From: airportsFromCodes(it.ArrivalID),
 			To:   airportsFromCodes(it.DepartureID),
@@ -295,18 +295,18 @@ func itineraryToRequest(it db.Itinerary) *Request {
 	return req
 }
 
-func airportsFromCodes(codes string) []*Airport {
-	var airports []*Airport
+func airportsFromCodes(codes string) []*InternalAirport {
+	var airports []*InternalAirport
 	for _, code := range strings.Split(codes, ",") {
 		code = strings.TrimSpace(code)
 		if code != "" {
-			airports = append(airports, &Airport{Code: code})
+			airports = append(airports, &InternalAirport{Code: code})
 		}
 	}
 	return airports
 }
 
-func applyItineraryFilters(flight *FlightInfo, it db.Itinerary, times pgtype.Text) {
+func applyItineraryFilters(flight *InternalFlightInfo, it db.Itinerary, times pgtype.Text) {
 	switch it.Stops {
 	case 1:
 		maxStops := int32(0)
@@ -332,7 +332,7 @@ func applyItineraryFilters(flight *FlightInfo, it db.Itinerary, times pgtype.Tex
 		flight.MaxDurationMinutes = &it.MaxDuration.Int32
 	}
 	if it.Emissions.Valid && it.Emissions.Int32 == 1 {
-		flight.Emissions = []Emissions{Emissions_EMISSIONS_LESS_ONLY}
+		flight.Emissions = []InternalEmissions{InternalEmissions_INTERNAL_EMISSIONS_LESS_ONLY}
 	}
 
 	if it.LayoverDuration.Valid {
