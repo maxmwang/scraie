@@ -1,6 +1,10 @@
 package search
 
-import "github.com/maxmwang/scraie/flights/internal/db"
+import (
+	"context"
+
+	"github.com/maxmwang/scraie/flights/internal/db"
+)
 
 type FlightOptions struct {
 	Option   db.Option
@@ -13,5 +17,5 @@ type Result struct {
 }
 
 type Searcher interface {
-	Search(db.Itinerary) (Result, error)
+	Search(context.Context, db.Itinerary) (Result, error)
 }

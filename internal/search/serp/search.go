@@ -1,8 +1,12 @@
 package serp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/maxmwang/scraie/flights/internal/db"
@@ -57,7 +61,10 @@ func New(APIKey string) SerpAPI {
 	}
 }
 
-func (s SerpAPI) Search(it db.Itinerary) (search.Result, error) {
+func (s SerpAPI) Search(ctx context.Context, it db.Itinerary) (search.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return search.Result{}, err
+	}
 	if err := validate(it); err != nil {
 		return search.Result{}, err
 	}
@@ -67,12 +74,21 @@ func (s SerpAPI) Search(it db.Itinerary) (search.Result, error) {
 	var raw map[string]interface{}
 	var err error
 	for attempt := range maxRetries {
-		raw, err = s.callWithTimeout(p)
+		raw, err = s.callWithContext(ctx, p)
 		if err == nil {
 			break
 		}
+		if ctx.Err() != nil {
+			return search.Result{}, ctx.Err()
+		}
 		if attempt < maxRetries-1 {
-			time.Sleep(time.Duration(1<<attempt) * time.Second)
+			timer := time.NewTimer(time.Duration(1<<attempt) * time.Second)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return search.Result{}, ctx.Err()
+			}
 		}
 	}
 	if err != nil {
@@ -92,22 +108,52 @@ func (s SerpAPI) Search(it db.Itinerary) (search.Result, error) {
 	return result.toDBResult(it.ID), nil
 }
 
-func (s SerpAPI) callWithTimeout(p map[string]string) (map[string]interface{}, error) {
-	type callResult struct {
-		data map[string]interface{}
-		err  error
+func (s SerpAPI) callWithContext(ctx context.Context, p map[string]string) (map[string]interface{}, error) {
+	if s.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.Timeout)
+		defer cancel()
 	}
-	ch := make(chan callResult, 1)
-	go func() {
-		data, err := s.Client.Search(p)
-		ch <- callResult{data, err}
-	}()
-	select {
-	case r := <-ch:
-		return r.data, r.err
-	case <-time.After(s.Timeout):
-		return nil, fmt.Errorf("timed out after %v", s.Timeout)
+
+	query := url.Values{}
+	for name, value := range p {
+		query.Add(name, value)
 	}
+	for name, value := range s.Client.Setting.Parameter {
+		if _, ok := query[name]; !ok {
+			query.Add(name, value)
+		}
+	}
+	if _, ok := query["api_key"]; !ok && s.Client.Setting.SerpApiKey != "" {
+		query.Add("api_key", s.Client.Setting.SerpApiKey)
+	}
+	if _, ok := query["engine"]; !ok && s.Client.Setting.Engine != "" {
+		query.Add("engine", s.Client.Setting.Engine)
+	}
+	if s.Client.Setting.Asynchronous {
+		query.Add("async", "true")
+	}
+	query.Add("source", "go:"+serpapi.VERSION)
+	query.Add("output", "json")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serpapi.BaseURL+"/search?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.Client.HttpSearch.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.New("failed to decode JSON")
+	}
+	if message, ok := result["error"].(string); ok {
+		return nil, errors.New(message)
+	}
+	return result, nil
 }
 
 func validate(it db.Itinerary) error {

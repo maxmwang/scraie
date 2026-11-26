@@ -11,6 +11,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/serpapi/serpapi-golang v0.0.0-20260126142127-0e41c7993cda
 	golang.org/x/sync v0.20.0
+	golang.org/x/time v0.16.0
 	google.golang.org/protobuf v1.36.11
 )
 

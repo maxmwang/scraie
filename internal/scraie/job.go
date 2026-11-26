@@ -3,6 +3,7 @@ package scraie
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/search/goflights"
+	"github.com/maxmwang/scraie/flights/internal/search/ratelimited"
 	"github.com/maxmwang/scraie/flights/internal/util"
 )
 
@@ -37,8 +39,12 @@ func Handle(ctx context.Context, args JobArgs) {
 		log.Fatal().Err(err).Msg("error loading itineraries")
 		return
 	}
+	// shuffle to increase randomness of search behavior
+	rand.Shuffle(len(itineraries), func(i, j int) {
+		itineraries[i], itineraries[j] = itineraries[j], itineraries[i]
+	})
 
-	searcher := goflights.New()
+	searcher := ratelimited.NewDefault(goflights.New())
 
 	var wg sync.WaitGroup
 	for _, it := range itineraries {
@@ -47,7 +53,7 @@ func Handle(ctx context.Context, args JobArgs) {
 		}
 		wg.Go(func() {
 			if !args.NoSearch {
-				result, err := searcher.Search(it)
+				result, err := searcher.Search(ctx, it)
 				if err != nil {
 					log.Error().
 						Err(err).

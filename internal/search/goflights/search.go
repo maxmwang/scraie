@@ -65,12 +65,10 @@ func New() search.Searcher {
 // Search runs the itinerary against Google Flights and returns its options as
 // db records. A round trip returns outbound options, each priced as the whole
 // round trip, which is what SerpAPI returns for the same row.
-func (c client) Search(it db.Itinerary) (search.Result, error) {
-	return c.SearchContext(context.Background(), it)
-}
-
-// SearchContext is Search bounded by ctx as well as by Timeout.
-func (c client) SearchContext(ctx context.Context, it db.Itinerary) (search.Result, error) {
+func (c client) Search(ctx context.Context, it db.Itinerary) (search.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return search.Result{}, err
+	}
 	if err := validate(it); err != nil {
 		return search.Result{}, err
 	}
