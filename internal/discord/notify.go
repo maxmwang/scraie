@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"golang.org/x/time/rate"
 
 	"github.com/maxmwang/scraie/flights/internal/db"
 	"github.com/maxmwang/scraie/flights/internal/scraie"
@@ -16,15 +17,81 @@ import (
 	"github.com/maxmwang/scraie/flights/internal/util/option"
 )
 
-type notifier struct {
-	session *discordgo.Session
-	db      *db.Queries
-}
-
 var (
 	colorPriceDrop = 0x2ECC71
 	colorPriceRise = 0xE74C3C
 )
+
+type notifier struct {
+	limiter *rate.Limiter
+
+	// hacky way to rate limit outbound discord API requests
+	session func(context.Context) *discordgo.Session
+	db      *db.Queries
+}
+
+func newNotifier(session *discordgo.Session, db *db.Queries) scraie.Notifier {
+	limiter := rate.NewLimiter(rate.Every(1/25*time.Second), 45)
+	sessionFunc := func(ctx context.Context) *discordgo.Session {
+		_ = limiter.Wait(ctx)
+		return session
+	}
+
+	return notifier{limiter, sessionFunc, db}
+}
+
+func (n notifier) Notify(ctx context.Context, notification scraie.Notification) error {
+	fields := []*discordgo.MessageEmbedField{
+		{
+			Name:  "Itinerary Summary",
+			Value: renderItinerarySummary(notification.Itinerary, itinerarySummaryOptions{}),
+		},
+		{
+			Name: "Price Notification",
+			Value: renderPriceNotification(
+				util.CurrencySymbol(notification.Itinerary.Currency),
+				notification.PreviousPrice,
+				notification.NewPrice,
+				notification.Near7DayMinimum,
+				notification.PriceMovement),
+		},
+		{
+			Name:  "Newest Cheapest Option's First Leg",
+			Value: renderCheapestOptionSummary(notification.CheapestOption),
+		},
+	}
+
+	color := colorPriceDrop
+	if notification.NewPrice > notification.PreviousPrice {
+		color = colorPriceRise
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       util.ItineraryToString(notification.Itinerary),
+		Description: "[Google Flights Link](" + searchpb.ToLink(notification.Itinerary) + ")",
+		Color:       color,
+		Fields:      fields,
+	}
+	if !notification.Timestamp.IsZero() {
+		embed.Timestamp = notification.Timestamp.UTC().Format(time.RFC3339)
+	}
+	if chart, err := util.BuildDailyMinimumPriceChartURL(notification.Itinerary, notification.PriceHistory, scraie.PriceHistoryLength); err == nil && chart != "" {
+		embed.Image = &discordgo.MessageEmbedImage{URL: chart}
+	}
+
+	user, err := n.db.GetUserByID(ctx, notification.Itinerary.UserID)
+	if err != nil {
+		return fmt.Errorf("get notification recipient: %w", err)
+	}
+	channel, err := n.session(ctx).UserChannelCreate(user.DiscordID)
+	if err != nil {
+		return fmt.Errorf("create direct message channel: %w", err)
+	}
+	_, err = n.session(ctx).ChannelMessageSendComplex(channel.ID, &discordgo.MessageSend{
+		Embeds: []*discordgo.MessageEmbed{embed},
+	})
+	return err
+}
 
 func renderPriceNotification(cur string, previousMin, newMin float64, nearMinimum option.Option[float64], movement option.Option[float64]) string {
 	var s strings.Builder
@@ -124,57 +191,4 @@ func formatDuration(minutes int32) string {
 	default:
 		return fmt.Sprintf("%dh %dm", hours, remaining)
 	}
-}
-
-func (n *notifier) Notify(ctx context.Context, notification scraie.Notification) error {
-	fields := []*discordgo.MessageEmbedField{
-		{
-			Name:  "Itinerary Summary",
-			Value: renderItinerarySummary(notification.Itinerary, itinerarySummaryOptions{}),
-		},
-		{
-			Name: "Price Notification",
-			Value: renderPriceNotification(
-				util.CurrencySymbol(notification.Itinerary.Currency),
-				notification.PreviousPrice,
-				notification.NewPrice,
-				notification.Near7DayMinimum,
-				notification.PriceMovement),
-		},
-		{
-			Name:  "Newest Cheapest Option's First Leg",
-			Value: renderCheapestOptionSummary(notification.CheapestOption),
-		},
-	}
-
-	color := colorPriceDrop
-	if notification.NewPrice > notification.PreviousPrice {
-		color = colorPriceRise
-	}
-
-	embed := &discordgo.MessageEmbed{
-		Title:       util.ItineraryToString(notification.Itinerary),
-		Description: "[Google Flights Link](" + searchpb.ToLink(notification.Itinerary) + ")",
-		Color:       color,
-		Fields:      fields,
-	}
-	if !notification.Timestamp.IsZero() {
-		embed.Timestamp = notification.Timestamp.UTC().Format(time.RFC3339)
-	}
-	if chart, err := util.BuildDailyMinimumPriceChartURL(notification.Itinerary, notification.PriceHistory, scraie.PriceHistoryLength); err == nil && chart != "" {
-		embed.Image = &discordgo.MessageEmbedImage{URL: chart}
-	}
-
-	user, err := n.db.GetUserByID(ctx, notification.Itinerary.UserID)
-	if err != nil {
-		return fmt.Errorf("get notification recipient: %w", err)
-	}
-	channel, err := n.session.UserChannelCreate(user.DiscordID)
-	if err != nil {
-		return fmt.Errorf("create direct message channel: %w", err)
-	}
-	_, err = n.session.ChannelMessageSendComplex(channel.ID, &discordgo.MessageSend{
-		Embeds: []*discordgo.MessageEmbed{embed},
-	})
-	return err
 }

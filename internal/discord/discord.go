@@ -142,7 +142,7 @@ func (b *Bot) Close() {
 }
 
 func (b *Bot) Notifier() scraie.Notifier {
-	return &notifier{session: b.session, db: b.db}
+	return newNotifier(b.session, b.db)
 }
 
 func Handle(ctx context.Context) error {
